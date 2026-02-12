@@ -20,6 +20,8 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/app ./app
+COPY backend/start.sh ./start.sh
+RUN chmod +x ./start.sh
 
 # Silent-Face-Anti-Spoofing (code + models)
 COPY Silent-Face-Anti-Spoofing/src ./Silent-Face-Anti-Spoofing/src
@@ -30,7 +32,7 @@ ENV SILENT_FACE_PATH=/app/Silent-Face-Anti-Spoofing
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-EXPOSE 8000
+EXPOSE 8080
 
-# Use PORT env (Cloud Run, Heroku inject this) with fallback to 8000
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# PORT: Cloud Run sets 8080, script defaults to 8000 if unset
+CMD ["./start.sh"]

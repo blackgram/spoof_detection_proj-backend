@@ -1,0 +1,17 @@
+# Render Blueprint - https://render.com/docs/blueprint-spec
+# Deploy: Connect repo, Render will use this for service config
+
+services:
+  - type: web
+    name: spoof-detection-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+
+    envVars:
+      - key: SILENT_FACE_PATH
+        value: /app/Silent-Face-Anti-Spoofing
+
+    healthCheckPath: /health
+    # ML workloads need more memory - Starter (512MB) minimum, Standard+ recommended
+    plan: starter

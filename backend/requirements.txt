@@ -1,0 +1,39 @@
+# FastAPI and server
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+
+# Face recognition
+# Note: DeepFace requires TensorFlow, which supports Python 3.9-3.12
+# Python 3.14 is not yet supported. Use Python 3.11 or 3.12.
+deepface>=0.0.89
+
+# Image processing
+Pillow>=10.3.0
+opencv-python-headless>=4.9.0
+numpy>=1.26.0
+
+# HTTP client (for async operations if needed)
+httpx>=0.26.0
+
+# Pydantic for data validation
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Logging
+python-json-logger>=2.0.7
+
+# Optional: Silent-Face-Anti-Spoofing
+# Install separately from: https://github.com/minivision-ai/Silent-Face-Anti-Spoofing
+# Or use: pip install git+https://github.com/minivision-ai/Silent-Face-Anti-Spoofing.git
+# Note: You may need to clone the repo and install manually
+
+# Silent-Face-Anti-Spoofing
+easydict>=1.9
+
+# PyTorch for Silent-Face-Anti-Spoofing (if using spoof detection)
+# Install with: pip install torch torchvision
+# Or get platform-specific install from: https://pytorch.org/get-started/locally/
+torch>=2.0.0
+torchvision>=0.15.0
+

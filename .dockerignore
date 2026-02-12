@@ -1,0 +1,28 @@
+# Git
+.git
+.gitignore
+
+# Backend
+backend/venv
+backend/__pycache__
+backend/**/__pycache__
+backend/.env
+backend/.env.local
+backend/*.log
+
+# Silent-Face (keep src + resources, exclude rest)
+Silent-Face-Anti-Spoofing/__pycache__
+Silent-Face-Anti-Spoofing/**/__pycache__
+Silent-Face-Anti-Spoofing/saved_logs
+Silent-Face-Anti-Spoofing/datasets
+Silent-Face-Anti-Spoofing/images
+Silent-Face-Anti-Spoofing/*.py
+Silent-Face-Anti-Spoofing/*.md
+Silent-Face-Anti-Spoofing/.idea
+
+# Frontend / mobile (not needed for backend)
+frontend
+mobile
+
+# Docs
+*.md

@@ -1,5 +1,25 @@
 import { API_BASE_URL } from '../config';
 
+/** Call on app load to pre-load ML models so /api/verify is fast. Takes 2–4 min first time. */
+export async function warmup(): Promise<void> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 min
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/warmup`, {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      console.log('[API] warmup: models ready');
+    }
+  } catch (e) {
+    clearTimeout(timeoutId);
+    console.warn('[API] warmup failed:', e);
+  }
+}
+
 export interface VerificationResult {
   liveness_check: {
     is_real: boolean;
@@ -40,7 +60,7 @@ export async function verifyIdentity(
 
   const startTime = Date.now();
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 min for ML inference
+  const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 min (cold start + ML inference)
 
   let response: Response;
   try {

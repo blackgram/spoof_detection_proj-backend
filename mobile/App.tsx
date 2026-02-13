@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -11,10 +11,13 @@ import {
 import ImagePickerComponent from './src/components/ImagePicker';
 import CameraCapture from './src/components/CameraCapture';
 import ResultDisplay from './src/components/ResultDisplay';
-import { verifyIdentity } from './src/api/verify';
+import { verifyIdentity, warmup } from './src/api/verify';
 import type { VerificationResult } from './src/api/verify';
 
 export default function App() {
+  useEffect(() => {
+    warmup(); // Pre-load models so verify is fast
+  }, []);
   const [idImageUri, setIdImageUri] = useState<string | null>(null);
   const [selfieImageUri, setSelfieImageUri] = useState<string | null>(null);
   const [result, setResult] = useState<VerificationResult | null>(null);

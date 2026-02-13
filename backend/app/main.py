@@ -1,12 +1,19 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 import uvicorn
 import logging
+import time
 
 from app.models.response import VerificationResponse
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging with timestamp and level
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
@@ -23,6 +30,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class RequestLogMiddleware(BaseHTTPMiddleware):
+    """Log every request with method, path, client, duration, and status."""
+
+    async def dispatch(self, request: Request, call_next):
+        start = time.perf_counter()
+        method, path = request.method, request.url.path
+        client = request.client.host if request.client else "unknown"
+        logger.info(f"→ {method} {path} [client={client}]")
+        response = await call_next(request)
+        duration_ms = (time.perf_counter() - start) * 1000
+        logger.info(f"← {method} {path} {response.status_code} ({duration_ms:.0f}ms)")
+        return response
+
+
+app.add_middleware(RequestLogMiddleware)
 
 # Lazy-loaded services (TensorFlow/PyTorch load on first request, not at startup)
 # This lets the container bind to PORT quickly for Cloud Run
@@ -53,6 +77,30 @@ async def root():
         "version": "1.0.0",
         "status": "running"
     }
+
+
+@app.post("/api/warmup")
+async def warmup_models():
+    """
+    Pre-load ML models (TensorFlow, PyTorch, DeepFace, Silent-Face).
+    Call this when the user opens the verification flow so /api/verify is fast.
+    Takes 2-4 minutes on first call; subsequent calls return immediately.
+    """
+    start = time.perf_counter()
+    logger.info("Warmup started: loading ML models...")
+    try:
+        t0 = time.perf_counter()
+        get_face_verification_service()
+        logger.info(f"Face verification service loaded ({time.perf_counter() - t0:.1f}s)")
+        t0 = time.perf_counter()
+        get_spoof_detection_service()
+        logger.info(f"Spoof detection service loaded ({time.perf_counter() - t0:.1f}s)")
+        elapsed = time.perf_counter() - start
+        logger.info(f"Warmup complete (total {elapsed:.1f}s)")
+        return {"status": "ready", "message": "Models loaded", "elapsed_sec": round(elapsed, 1)}
+    except Exception as e:
+        logger.error(f"Warmup failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/health")
@@ -88,6 +136,7 @@ async def verify_identity(
         if not selfie_image.content_type or not selfie_image.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="Selfie image must be an image file")
 
+        verify_start = time.perf_counter()
         logger.info("Starting verification process...")
 
         # Step 1: Spoof Detection (check if selfie is real)
@@ -95,7 +144,6 @@ async def verify_identity(
         logger.info("STEP 1: SPOOF DETECTION (Liveness Check)")
         logger.info("=" * 80)
         
-        # Read image bytes (reset file pointer first)
         await selfie_image.seek(0)
         selfie_bytes = await selfie_image.read()
         
@@ -104,7 +152,9 @@ async def verify_identity(
         
         logger.info(f"Selfie image received: {len(selfie_bytes)} bytes, content_type: {selfie_image.content_type}")
         
+        t0 = time.perf_counter()
         spoof_result = await get_spoof_detection_service().detect_spoof(selfie_bytes)
+        logger.info(f"Spoof detection done ({time.perf_counter() - t0:.1f}s)")
         
         logger.info(f"Spoof detection result: is_real={spoof_result['is_real']}, confidence={spoof_result['confidence']:.2%}")
         if 'details' in spoof_result:
@@ -143,10 +193,12 @@ async def verify_identity(
         
         logger.info(f"ID image received: {len(id_bytes)} bytes, content_type: {id_image.content_type}")
         
+        t0 = time.perf_counter()
         verification_result = await get_face_verification_service().verify_faces(
             id_bytes, 
             selfie_bytes
         )
+        logger.info(f"Face verification done ({time.perf_counter() - t0:.1f}s)")
         
         logger.info(f"Face verification result: verified={verification_result['verified']}, "
                    f"confidence={verification_result['confidence']:.2%}, "
@@ -160,8 +212,9 @@ async def verify_identity(
             overall_result = "fail"
             message = f"Face verification failed. Faces do not match (confidence: {verification_result['confidence']:.2%})."
 
+        total_sec = time.perf_counter() - verify_start
         logger.info("=" * 80)
-        logger.info(f"📊 FINAL RESULT: {overall_result.upper()}")
+        logger.info(f"📊 FINAL RESULT: {overall_result.upper()} (total {total_sec:.1f}s)")
         logger.info(f"Message: {message}")
         logger.info("=" * 80)
 
@@ -201,7 +254,9 @@ async def check_spoof(
             raise HTTPException(status_code=400, detail="Image must be an image file")
 
         image_bytes = await image.read()
+        t0 = time.perf_counter()
         result = await get_spoof_detection_service().detect_spoof(image_bytes)
+        logger.info(f"Spoof check done ({time.perf_counter() - t0:.1f}s) is_real={result['is_real']}")
 
         return {
             "is_real": result["is_real"],
@@ -245,7 +300,9 @@ async def verify_faces(
         if not image2_bytes or len(image2_bytes) == 0:
             raise HTTPException(status_code=400, detail="Second image is empty or could not be read")
         
+        t0 = time.perf_counter()
         result = await get_face_verification_service().verify_faces(image1_bytes, image2_bytes)
+        logger.info(f"Face verify done ({time.perf_counter() - t0:.1f}s) verified={result['verified']}")
 
         return {
             "verified": result["verified"],

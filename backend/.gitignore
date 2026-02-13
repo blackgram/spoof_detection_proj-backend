@@ -41,8 +41,9 @@ ENV/
 *.log
 logs/
 
-# Models (download separately)
+# Models (download separately) - exclude ML weight dirs, but keep app/models/ for Python models
 models/
+!app/models/
 *.pth
 *.pkl
 

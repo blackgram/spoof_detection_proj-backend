@@ -1,12 +1,8 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 import uvicorn
-from typing import Optional
 import logging
 
-from app.services.face_verification import FaceVerificationService
-from app.services.spoof_detection import SpoofDetectionService
 from app.models.response import VerificationResponse
 
 # Configure logging
@@ -28,9 +24,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize services
-face_verification_service = FaceVerificationService()
-spoof_detection_service = SpoofDetectionService()
+# Lazy-loaded services (TensorFlow/PyTorch load on first request, not at startup)
+# This lets the container bind to PORT quickly for Cloud Run
+_face_verification_service = None
+_spoof_detection_service = None
+
+
+def get_face_verification_service():
+    global _face_verification_service
+    if _face_verification_service is None:
+        from app.services.face_verification import FaceVerificationService
+        _face_verification_service = FaceVerificationService()
+    return _face_verification_service
+
+
+def get_spoof_detection_service():
+    global _spoof_detection_service
+    if _spoof_detection_service is None:
+        from app.services.spoof_detection import SpoofDetectionService
+        _spoof_detection_service = SpoofDetectionService()
+    return _spoof_detection_service
 
 
 @app.get("/")
@@ -91,7 +104,7 @@ async def verify_identity(
         
         logger.info(f"Selfie image received: {len(selfie_bytes)} bytes, content_type: {selfie_image.content_type}")
         
-        spoof_result = await spoof_detection_service.detect_spoof(selfie_bytes)
+        spoof_result = await get_spoof_detection_service().detect_spoof(selfie_bytes)
         
         logger.info(f"Spoof detection result: is_real={spoof_result['is_real']}, confidence={spoof_result['confidence']:.2%}")
         if 'details' in spoof_result:
@@ -130,7 +143,7 @@ async def verify_identity(
         
         logger.info(f"ID image received: {len(id_bytes)} bytes, content_type: {id_image.content_type}")
         
-        verification_result = await face_verification_service.verify_faces(
+        verification_result = await get_face_verification_service().verify_faces(
             id_bytes, 
             selfie_bytes
         )
@@ -188,7 +201,7 @@ async def check_spoof(
             raise HTTPException(status_code=400, detail="Image must be an image file")
 
         image_bytes = await image.read()
-        result = await spoof_detection_service.detect_spoof(image_bytes)
+        result = await get_spoof_detection_service().detect_spoof(image_bytes)
 
         return {
             "is_real": result["is_real"],
@@ -232,7 +245,7 @@ async def verify_faces(
         if not image2_bytes or len(image2_bytes) == 0:
             raise HTTPException(status_code=400, detail="Second image is empty or could not be read")
         
-        result = await face_verification_service.verify_faces(image1_bytes, image2_bytes)
+        result = await get_face_verification_service().verify_faces(image1_bytes, image2_bytes)
 
         return {
             "verified": result["verified"],

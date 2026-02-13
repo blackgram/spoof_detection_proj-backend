@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -5,14 +6,37 @@ from starlette.requests import Request
 import uvicorn
 import logging
 import time
+import socket
 
 from app.models.response import VerificationResponse
 
+
+def _get_local_ip():
+    """Get this machine's LAN IP for mobile connectivity."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "?"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    ip = _get_local_ip()
+    logger.info(f"Server ready. For physical device: EXPO_PUBLIC_API_URL=http://{ip}:8000")
+    yield
+
 # Configure logging with timestamp and level
+import sys
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
+    stream=sys.stdout,
+    force=True,
 )
 logger = logging.getLogger(__name__)
 
@@ -20,6 +44,7 @@ app = FastAPI(
     title="Face Verification & Spoof Detection API",
     description="API for face verification (1:1 matching) and anti-spoofing detection",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS middleware

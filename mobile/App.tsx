@@ -70,7 +70,7 @@ export default function App() {
           {/* Upload Section */}
           <View style={styles.card}>
             <ImagePickerComponent
-              label="ID Photo / Reference Image"
+              label="Reference Image"
               imageUri={idImageUri}
               onImageChange={setIdImageUri}
               required
@@ -117,12 +117,9 @@ export default function App() {
           {!result && !isLoading && !error && (
             <View style={styles.infoBox}>
               <Text style={styles.infoTitle}>How it works</Text>
-              <Text style={styles.infoText}>• Select your ID photo from gallery</Text>
-              <Text style={styles.infoText}>• Capture a selfie with camera</Text>
+              <Text style={styles.infoText}>• Select your reference image from gallery (This would come from our customer data like mandate)</Text>
+              <Text style={styles.infoText}>• Capture a selfie with camera (This would be the selfie of the customer)</Text>
               <Text style={styles.infoText}>• Tap Verify to check liveness & face match</Text>
-              <Text style={styles.infoHint}>
-                Make sure the backend is running at the configured API URL.
-              </Text>
             </View>
           )}
         </View>

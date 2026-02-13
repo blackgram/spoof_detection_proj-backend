@@ -79,7 +79,7 @@ export default function CameraCapture({
   return (
     <View style={styles.container}>
       <Text style={styles.label}>
-        Selfie / Query Image (Camera)
+        Selfie Image (Camera)
         {required && <Text style={styles.required}> *</Text>}
       </Text>
 

@@ -1,0 +1,27 @@
+# GCP Cloud Build - deploy spoof-detection-demo to Cloud Run
+# Uses project root as context so backend/app (including app/models/) is included
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'Dockerfile'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/spoof-detection-demo:$COMMIT_SHA'
+      - '.'
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/spoof-detection-demo:$COMMIT_SHA'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'spoof-detection-demo'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/spoof-detection-demo:$COMMIT_SHA'
+      - '--region'
+      - 'europe-west1'
+images:
+  - 'gcr.io/$PROJECT_ID/spoof-detection-demo:$COMMIT_SHA'

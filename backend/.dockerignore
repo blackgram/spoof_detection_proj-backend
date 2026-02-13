@@ -16,6 +16,8 @@ env/
 .idea
 .vscode
 *.log
+# Exclude ML model dirs, but keep app/models/ (Pydantic response models)
 models/
+!app/models/
 *.md
 

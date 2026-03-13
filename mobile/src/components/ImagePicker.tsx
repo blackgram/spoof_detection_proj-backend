@@ -2,10 +2,11 @@ import React from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
+  Pressable,
   Image,
   StyleSheet,
   Alert,
+  Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -63,22 +64,36 @@ export default function ImagePickerComponent({
 
       {imageUri ? (
         <View style={styles.previewContainer}>
-          <Image source={{ uri: imageUri }} style={styles.preview} resizeMode="contain" />
+          <Image source={{ uri: imageUri }} style={styles.preview} resizeMode="cover" />
           <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.changeButton} onPress={handlePickImage}>
+            <Pressable
+              style={({ pressed }) => [styles.changeButton, pressed && styles.buttonPressed]}
+              onPress={handlePickImage}
+              android_ripple={{ color: 'rgba(255,255,255,0.3)' }}
+            >
               <Text style={styles.changeButtonText}>Change</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.removeButton} onPress={handleRemove}>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.removeButton, pressed && styles.buttonPressed]}
+              onPress={handleRemove}
+              android_ripple={{ color: 'rgba(255,255,255,0.3)' }}
+            >
               <Text style={styles.removeButtonText}>Remove</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
       ) : (
-        <TouchableOpacity style={styles.uploadArea} onPress={handlePickImage}>
-          <Text style={styles.uploadIcon}>📷</Text>
+        <Pressable
+          style={({ pressed }) => [styles.uploadArea, pressed && styles.uploadAreaPressed]}
+          onPress={handlePickImage}
+          android_ripple={{ color: 'rgba(14,165,233,0.15)' }}
+        >
+          <View style={styles.uploadIconWrap}>
+            <Text style={styles.uploadIcon}>📷</Text>
+          </View>
           <Text style={styles.uploadText}>Tap to select ID photo</Text>
-          <Text style={styles.uploadHint}>PNG, JPG up to 10MB</Text>
-        </TouchableOpacity>
+          <Text style={styles.uploadHint}>PNG, JPG • Crop to square</Text>
+        </Pressable>
       )}
     </View>
   );
@@ -89,73 +104,91 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   label: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
+    color: '#334155',
+    marginBottom: 10,
   },
   required: {
     color: '#ef4444',
   },
   previewContainer: {
-    borderWidth: 2,
-    borderColor: '#e5e7eb',
-    borderRadius: 12,
-    padding: 16,
-    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: '#f8fafc',
+    ...Platform.select({ android: { elevation: 2 } }),
   },
   preview: {
     width: '100%',
-    height: 200,
-    borderRadius: 8,
-    marginBottom: 12,
+    height: 220,
+    borderRadius: 12,
+    marginBottom: 14,
+    backgroundColor: '#e2e8f0',
   },
   buttonRow: {
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'center',
   },
+  buttonPressed: {
+    opacity: 0.85,
+  },
   changeButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#2563eb',
-    borderRadius: 8,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    backgroundColor: '#ffa646',
+    borderRadius: 12,
   },
   changeButtonText: {
     color: '#fff',
     fontWeight: '600',
+    fontSize: 15,
   },
   removeButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
     backgroundColor: '#ef4444',
-    borderRadius: 8,
+    borderRadius: 12,
   },
   removeButtonText: {
     color: '#fff',
     fontWeight: '600',
+    fontSize: 15,
   },
   uploadArea: {
     borderWidth: 2,
-    borderColor: '#d1d5db',
+    borderColor: '#cbd5e1',
     borderStyle: 'dashed',
-    borderRadius: 12,
-    padding: 24,
+    borderRadius: 16,
+    padding: 28,
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#f8fafc',
+  },
+  uploadAreaPressed: {
+    backgroundColor: '#f1f5f9',
+  },
+  uploadIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#e0f2fe',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
   },
   uploadIcon: {
-    fontSize: 48,
-    marginBottom: 8,
+    fontSize: 32,
   },
   uploadText: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
-    color: '#2563eb',
+    color: '#0ea5e9',
   },
   uploadHint: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 4,
+    fontSize: 13,
+    color: '#64748b',
+    marginTop: 6,
   },
 });

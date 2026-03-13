@@ -22,3 +22,6 @@ frontend/.env
 mobile/node_modules/
 mobile/.env.local
 frontend/
+
+# Backend dev: persisted FIDO2 credentials when Firestore not used
+backend/data/

@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import type { VerificationResult } from '../api/verify';
+import { colors, radius, spacing } from '../theme';
 
 interface ResultDisplayProps {
   result: VerificationResult | null;
@@ -12,8 +13,9 @@ export default function ResultDisplay({ result, isLoading, error }: ResultDispla
   if (isLoading) {
     return (
       <View style={styles.card}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Verifying identity...</Text>
+        <Text style={styles.loadingSubtext}>Liveness & face match in progress</Text>
       </View>
     );
   }
@@ -34,6 +36,8 @@ export default function ResultDisplay({ result, isLoading, error }: ResultDispla
   const isPass = result.overall_result === 'pass';
   const isSpoof = result.overall_result === 'spoof_detected';
 
+  const resultIcon = isPass ? '✓' : isSpoof ? '⚠' : '✗';
+
   return (
     <View style={styles.card}>
       {/* Overall Result */}
@@ -43,12 +47,19 @@ export default function ResultDisplay({ result, isLoading, error }: ResultDispla
           isPass ? styles.passBanner : isSpoof ? styles.spoofBanner : styles.failBanner,
         ]}
       >
-        <Text style={styles.resultIcon}>{isPass ? '✓' : '✗'}</Text>
+        <View
+          style={[
+            styles.resultIconWrap,
+            isPass ? styles.passIconWrap : isSpoof ? styles.spoofIconWrap : styles.failIconWrap,
+          ]}
+        >
+          <Text style={styles.resultIcon}>{resultIcon}</Text>
+        </View>
         <View style={styles.resultContent}>
           <Text
             style={[
               styles.resultTitle,
-              isPass ? styles.passText : styles.failText,
+              isPass ? styles.passText : isSpoof ? styles.spoofText : styles.failText,
             ]}
           >
             {isPass ? 'Verification Passed' : isSpoof ? 'Spoof Detected' : 'Verification Failed'}
@@ -113,96 +124,126 @@ export default function ResultDisplay({ result, isLoading, error }: ResultDispla
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    marginTop: 16,
+    backgroundColor: colors.card,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    marginTop: spacing.lg,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: colors.cardBorder,
     alignItems: 'center',
+    ...Platform.select({ android: { elevation: 2 } }),
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#6b7280',
+    marginTop: spacing.md,
+    fontSize: 17,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  loadingSubtext: {
+    marginTop: 4,
+    fontSize: 13,
+    color: colors.textSecondary,
   },
   errorCard: {
-    backgroundColor: '#fef2f2',
-    borderColor: '#fecaca',
+    backgroundColor: colors.errorBg,
+    borderColor: colors.errorMuted,
   },
   errorTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#b91c1c',
-    marginBottom: 8,
+    color: colors.error,
+    marginBottom: spacing.sm,
   },
   errorText: {
     fontSize: 14,
-    color: '#991b1b',
+    color: colors.textSecondary,
     textAlign: 'center',
+    lineHeight: 22,
   },
   resultBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    marginBottom: spacing.lg,
     width: '100%',
   },
   passBanner: {
-    backgroundColor: '#dcfce7',
+    backgroundColor: colors.successMuted,
     borderWidth: 1,
-    borderColor: '#86efac',
+    borderColor: colors.success,
   },
   spoofBanner: {
-    backgroundColor: '#fee2e2',
+    backgroundColor: colors.errorMuted,
     borderWidth: 1,
-    borderColor: '#fecaca',
+    borderColor: colors.error,
   },
   failBanner: {
-    backgroundColor: '#fef9c3',
+    backgroundColor: colors.primaryMuted,
     borderWidth: 1,
-    borderColor: '#fde047',
+    borderColor: colors.warning,
+  },
+  resultIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+  },
+  passIconWrap: {
+    backgroundColor: colors.success,
+  },
+  spoofIconWrap: {
+    backgroundColor: colors.error,
+  },
+  failIconWrap: {
+    backgroundColor: colors.warning,
   },
   resultIcon: {
-    fontSize: 32,
-    marginRight: 12,
-    color: '#16a34a',
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#fff',
   },
   resultContent: {
     flex: 1,
   },
   resultTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   passText: {
-    color: '#15803d',
+    color: colors.success,
+  },
+  spoofText: {
+    color: colors.error,
   },
   failText: {
-    color: '#b91c1c',
+    color: colors.warning,
   },
   resultMessage: {
     fontSize: 14,
-    color: '#374151',
+    color: colors.textSecondary,
+    lineHeight: 22,
   },
   detailsGrid: {
     width: '100%',
-    gap: 16,
+    gap: spacing.md,
   },
   detailBlock: {
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    padding: 16,
+    borderColor: colors.cardBorder,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    backgroundColor: colors.background,
   },
   detailTitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    color: '#6b7280',
-    marginBottom: 8,
-    letterSpacing: 0.5,
+    color: colors.textMuted,
+    marginBottom: spacing.sm,
+    letterSpacing: 0.8,
   },
   detailValue: {
     fontSize: 16,
@@ -211,23 +252,23 @@ const styles = StyleSheet.create({
   },
   confidenceText: {
     fontSize: 14,
-    color: '#374151',
-    marginBottom: 8,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   progressBar: {
-    height: 8,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 4,
+    height: 10,
+    backgroundColor: colors.cardBorder,
+    borderRadius: 5,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    borderRadius: 4,
+    borderRadius: 5,
   },
   passFill: {
-    backgroundColor: '#22c55e',
+    backgroundColor: colors.success,
   },
   failFill: {
-    backgroundColor: '#ef4444',
+    backgroundColor: colors.error,
   },
 });

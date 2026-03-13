@@ -1,22 +1,35 @@
 import { API_BASE_URL } from '../config';
 
-/** Call on app load to pre-load ML models so /api/verify is fast. Takes 2–4 min first time. */
+const WARMUP_TIMEOUT_MS = 360000; // 6 min (backend can take 2–4 min to load models first time)
+
+/** Call on app load to pre-load ML models so /api/verify is fast. Takes 2–4 min first time. Best-effort; app works without it. */
 export async function warmup(): Promise<void> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 min
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/warmup`, {
+  const doWarmup = (): Promise<void> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), WARMUP_TIMEOUT_MS);
+    return fetch(`${API_BASE_URL}/api/warmup`, {
       method: 'POST',
       headers: { Accept: 'application/json' },
       signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    if (res.ok) {
-      console.log('[API] warmup: models ready');
-    }
+    })
+      .then((res) => {
+        clearTimeout(timeoutId);
+        if (res.ok) console.log('[API] warmup: models ready');
+      })
+      .catch((e) => {
+        clearTimeout(timeoutId);
+        throw e;
+      });
+  };
+
+  try {
+    await doWarmup();
   } catch (e) {
-    clearTimeout(timeoutId);
     console.warn('[API] warmup failed:', e);
+    // Retry once after 15s in case backend was still starting
+    setTimeout(() => {
+      doWarmup().catch((err) => console.warn('[API] warmup retry failed:', err));
+    }, 15000);
   }
 }
 

@@ -25,8 +25,22 @@ def _get_local_ip():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from app.config import get_settings
+    settings = get_settings()
+    if settings.firestore_project_id:
+        logger.info("Firestore configured (project_id set). Using Firestore for persistence.")
+    else:
+        logger.warning("FIRESTORE_PROJECT_ID not set. Using in-memory store. Set it in backend/.env to use Firestore.")
     ip = _get_local_ip()
-    logger.info(f"Server ready. For physical device: EXPO_PUBLIC_API_URL=http://{ip}:8000")
+    logger.info("Server ready. For physical device: EXPO_PUBLIC_API_URL=http://%s:8000", ip)
+    # Seed mock KYC-verified customers with accounts when using Firestore (or in-memory) and store is empty
+    try:
+        _db = FirestoreClient()
+        created = _db.seed_mock_customers_if_empty()
+        if created:
+            logger.info("Seeded %d mock customers (Alice, Bob, Carol) with accounts for transfer testing.", created)
+    except Exception as e:
+        logger.warning("Seed mock data skipped or failed: %s", e)
     yield
 
 # Configure logging with timestamp and level
@@ -42,10 +56,18 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Face Verification & Spoof Detection API",
-    description="API for face verification (1:1 matching) and anti-spoofing detection",
+    description="API for face verification (1:1 matching), anti-spoofing, and KYC (customers, onboarding, verify)",
     version="1.0.0",
     lifespan=lifespan,
 )
+from app.routers import customers, device_auth, fido2, kyc, transactions
+from app.db.firestore_client import FirestoreClient
+
+app.include_router(customers.router)
+app.include_router(device_auth.router)
+app.include_router(fido2.router)
+app.include_router(kyc.router)
+app.include_router(transactions.router)
 
 # CORS middleware
 app.add_middleware(
@@ -73,26 +95,8 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(RequestLogMiddleware)
 
-# Lazy-loaded services (TensorFlow/PyTorch load on first request, not at startup)
-# This lets the container bind to PORT quickly for Cloud Run
-_face_verification_service = None
-_spoof_detection_service = None
-
-
-def get_face_verification_service():
-    global _face_verification_service
-    if _face_verification_service is None:
-        from app.services.face_verification import FaceVerificationService
-        _face_verification_service = FaceVerificationService()
-    return _face_verification_service
-
-
-def get_spoof_detection_service():
-    global _spoof_detection_service
-    if _spoof_detection_service is None:
-        from app.services.spoof_detection import SpoofDetectionService
-        _spoof_detection_service = SpoofDetectionService()
-    return _spoof_detection_service
+# Lazy-loaded services (see app.services.loader)
+from app.services.loader import get_face_verification_service, get_spoof_detection_service
 
 
 @app.get("/")
@@ -102,6 +106,54 @@ async def root():
         "version": "1.0.0",
         "status": "running"
     }
+
+
+@app.get("/.well-known/assetlinks.json")
+async def android_asset_links():
+    """
+    Digital Asset Links for Android passkeys (Credential Manager).
+    Required for FIDO2/passkey creation on Android. Configure ANDROID_SHA256_CERT_FINGERPRINTS in .env.
+    """
+    from app.config import get_settings
+    settings = get_settings()
+    fingerprints = [f.strip() for f in settings.android_sha256_cert_fingerprints.split(",") if f.strip()]
+    if not fingerprints:
+        return [
+            {
+                "relation": ["delegate_permission/common.get_login_creds", "delegate_permission/common.handle_all_urls"],
+                "target": {
+                    "namespace": "android_app",
+                    "package_name": settings.android_package_name,
+                    "sha256_cert_fingerprints": [],
+                },
+            }
+        ]
+    return [
+        {
+            "relation": ["delegate_permission/common.get_login_creds", "delegate_permission/common.handle_all_urls"],
+            "target": {
+                "namespace": "android_app",
+                "package_name": settings.android_package_name,
+                "sha256_cert_fingerprints": fingerprints,
+            },
+        }
+    ]
+
+
+@app.get("/.well-known/apple-app-site-association")
+async def apple_app_site_association():
+    """
+    iOS Associated Domains: links this domain to your app for passkeys (webcredentials).
+    Set IOS_TEAM_ID in .env (find in Xcode → Signing & Capabilities, or Apple Developer).
+    """
+    from app.config import get_settings
+    from fastapi.responses import JSONResponse
+    settings = get_settings()
+    team_id = (settings.ios_team_id or "").strip()
+    bundle_id = (settings.ios_bundle_id or settings.android_package_name or "").strip()
+    apps = [f"{team_id}.{bundle_id}"] if team_id and bundle_id else []
+    body = {"webcredentials": {"apps": apps}}
+    return JSONResponse(content=body, media_type="application/json")
 
 
 @app.post("/api/warmup")

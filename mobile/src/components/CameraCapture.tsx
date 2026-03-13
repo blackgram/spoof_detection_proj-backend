@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
+  Pressable,
   Image,
   StyleSheet,
   Alert,
+  Platform,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 
@@ -13,12 +14,15 @@ interface CameraCaptureProps {
   imageUri: string | null;
   onImageCapture: (uri: string | null) => void;
   required?: boolean;
+  /** Optional label (default: "Selfie Image (Camera)") */
+  label?: string;
 }
 
 export default function CameraCapture({
   imageUri,
   onImageCapture,
   required = false,
+  label = 'Selfie Image (Camera)',
 }: CameraCaptureProps) {
   const [isCapturing, setIsCapturing] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
@@ -79,40 +83,67 @@ export default function CameraCapture({
   return (
     <View style={styles.container}>
       <Text style={styles.label}>
-        Selfie Image (Camera)
+        {label}
         {required && <Text style={styles.required}> *</Text>}
       </Text>
 
       {imageUri && !isCapturing ? (
         <View style={styles.previewContainer}>
-          <Image source={{ uri: imageUri }} style={styles.preview} resizeMode="contain" />
+          <Image source={{ uri: imageUri }} style={styles.preview} resizeMode="cover" />
           <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.retakeButton} onPress={handleRetake}>
+            <Pressable
+              style={({ pressed }) => [styles.retakeButton, pressed && styles.buttonPressed]}
+              onPress={handleRetake}
+              android_ripple={{ color: 'rgba(255,255,255,0.3)' }}
+            >
               <Text style={styles.retakeButtonText}>Retake</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.removeButton} onPress={handleRemove}>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.removeButton, pressed && styles.buttonPressed]}
+              onPress={handleRemove}
+              android_ripple={{ color: 'rgba(255,255,255,0.3)' }}
+            >
               <Text style={styles.removeButtonText}>Remove</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
       ) : isCapturing ? (
         <View style={styles.cameraContainer}>
           <CameraView style={styles.camera} ref={cameraRef} facing="front" />
+          {/* Face oval guide for liveness */}
+          <View style={styles.faceOvalOverlay} pointerEvents="none">
+            <View style={styles.faceOval} />
+            <Text style={styles.faceOvalHint}>Position your face in the oval</Text>
+          </View>
           <View style={styles.cameraOverlay}>
-            <TouchableOpacity style={styles.captureButton} onPress={handleCapture}>
-              <Text style={styles.captureButtonText}>Capture</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
+            <Pressable
+              style={({ pressed }) => [styles.captureButton, pressed && styles.captureButtonPressed]}
+              onPress={handleCapture}
+              android_ripple={{ color: 'rgba(255,255,255,0.4)' }}
+            >
+              <View style={styles.captureButtonInner} />
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.cancelButton, pressed && styles.buttonPressed]}
+              onPress={handleCancel}
+              android_ripple={{ color: 'rgba(255,255,255,0.3)' }}
+            >
               <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         </View>
       ) : (
-        <TouchableOpacity style={styles.uploadArea} onPress={handleStartCapture}>
-          <Text style={styles.uploadIcon}>📸</Text>
+        <Pressable
+          style={({ pressed }) => [styles.uploadArea, pressed && styles.uploadAreaPressed]}
+          onPress={handleStartCapture}
+          android_ripple={{ color: 'rgba(14,165,233,0.15)' }}
+        >
+          <View style={styles.uploadIconWrap}>
+            <Text style={styles.uploadIcon}>📸</Text>
+          </View>
           <Text style={styles.uploadText}>Tap to capture selfie</Text>
-          <Text style={styles.uploadHint}>Take a live photo for verification</Text>
-        </TouchableOpacity>
+          <Text style={styles.uploadHint}>Live photo required for liveness check</Text>
+        </Pressable>
       )}
     </View>
   );
@@ -123,116 +154,161 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   label: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
+    color: '#334155',
+    marginBottom: 10,
   },
   required: {
     color: '#ef4444',
   },
   previewContainer: {
-    borderWidth: 2,
-    borderColor: '#e5e7eb',
-    borderRadius: 12,
-    padding: 16,
-    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: '#f8fafc',
+    ...Platform.select({ android: { elevation: 2 } }),
   },
   preview: {
     width: '100%',
-    height: 200,
-    borderRadius: 8,
-    marginBottom: 12,
+    height: 220,
+    borderRadius: 12,
+    marginBottom: 14,
+    backgroundColor: '#e2e8f0',
   },
   buttonRow: {
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'center',
   },
+  buttonPressed: {
+    opacity: 0.85,
+  },
   retakeButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#2563eb',
-    borderRadius: 8,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    backgroundColor: '#ffa646',
+    borderRadius: 12,
   },
   retakeButtonText: {
     color: '#fff',
     fontWeight: '600',
+    fontSize: 15,
   },
   removeButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
     backgroundColor: '#ef4444',
-    borderRadius: 8,
+    borderRadius: 12,
   },
   removeButtonText: {
     color: '#fff',
     fontWeight: '600',
+    fontSize: 15,
   },
   cameraContainer: {
-    borderWidth: 2,
-    borderColor: '#2563eb',
-    borderRadius: 12,
+    borderRadius: 20,
     overflow: 'hidden',
     backgroundColor: '#000',
+    ...Platform.select({ android: { elevation: 4 } }),
   },
   camera: {
     flex: 1,
-    minHeight: 300,
+    minHeight: 340,
+  },
+  faceOvalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  faceOval: {
+    width: 220,
+    height: 280,
+    borderRadius: 110,
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: 'transparent',
+  },
+  faceOvalHint: {
+    position: 'absolute',
+    bottom: 100,
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 14,
+    fontWeight: '500',
   },
   cameraOverlay: {
     position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
+    bottom: Platform.OS === 'android' ? 28 : 24,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 12,
+    alignItems: 'center',
+    gap: 24,
   },
   captureButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: '#22c55e',
-    borderRadius: 8,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#fff',
+    borderWidth: 5,
+    borderColor: '#0ea5e9',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  captureButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
+  captureButtonPressed: {
+    transform: [{ scale: 0.95 }],
+  },
+  captureButtonInner: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#0ea5e9',
   },
   cancelButton: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: '#ef4444',
-    borderRadius: 8,
-    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderRadius: 12,
   },
   cancelButtonText: {
     color: '#fff',
     fontWeight: '600',
+    fontSize: 15,
   },
   uploadArea: {
     borderWidth: 2,
-    borderColor: '#d1d5db',
+    borderColor: '#cbd5e1',
     borderStyle: 'dashed',
-    borderRadius: 12,
-    padding: 24,
+    borderRadius: 16,
+    padding: 28,
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#f8fafc',
+  },
+  uploadAreaPressed: {
+    backgroundColor: '#f1f5f9',
+  },
+  uploadIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#e0f2fe',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
   },
   uploadIcon: {
-    fontSize: 48,
-    marginBottom: 8,
+    fontSize: 32,
   },
   uploadText: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
-    color: '#2563eb',
+    color: '#0ea5e9',
   },
   uploadHint: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 4,
+    fontSize: 13,
+    color: '#64748b',
+    marginTop: 6,
   },
 });

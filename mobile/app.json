@@ -7,7 +7,8 @@
         {
           "cameraPermission": "This app needs camera access to capture your selfie for identity verification."
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "slug": "spoof-detection-mobile",
     "version": "1.0.0",
@@ -24,10 +25,16 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "This app needs camera access to capture your selfie for identity verification.",
-        "NSPhotoLibraryUsageDescription": "This app needs photo library access to select your ID photo."
-      }
+        "NSPhotoLibraryUsageDescription": "This app needs photo library access to select your ID photo.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSAllowsLocalNetworking": true
+        }
+      },
+      "bundleIdentifier": "com.blackgram.spoofdetectionmobile"
     },
     "android": {
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"

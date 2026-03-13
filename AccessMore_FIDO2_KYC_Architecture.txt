@@ -1,0 +1,158 @@
+ACCESSMORE – FIDO2 + KYC ARCHITECTURE React Native + Backend Full
+Architecture Flow
+
+============================================================ HIGH-LEVEL
+ARCHITECTURE OVERVIEW
+============================================================
+
+USER DEVICE - React Native App - FIDO2 Native Module (iOS / Android) -
+OS Biometric Prompt - Secure Enclave (iOS) / StrongBox or TEE
+(Android) - Camera (Selfie Capture)
+
+Communicates securely via HTTPS (TLS 1.2+) to:
+
+API GATEWAY
+
+Which routes to:
+
+1.  AUTH SERVICE
+
+    -   FIDO2 Challenge Generator
+    -   Signature Verification
+    -   Key Attestation Validation
+
+2.  KYC SERVICE
+
+    -   Selfie Processing
+    -   Liveness Detection
+    -   Face Embedding Matching
+    -   BVN Reference Comparison
+
+3.  RISK ENGINE
+
+    -   Device Change Detection
+    -   Biometric Change Detection
+    -   Transaction Threshold Rules
+    -   Behavioral Risk Scoring
+
+4.  CORE BANKING
+
+5.  AUDIT LOG SERVICE
+
+    -   Signature Logs
+    -   Device Metadata
+    -   Biometric Modality
+    -   Timestamp + Nonce
+
+============================================================ FLOW 1:
+DEVICE REGISTRATION (KYC + FIDO2 BINDING)
+============================================================
+
+Step 1 – Initial Login User logs in using Password + OTP (or existing
+secure method).
+
+Step 2 – Selfie + Liveness Capture React Native captures selfie and
+sends to backend.
+
+POST /kyc/verify-face { image, deviceId, userId }
+
+Step 3 – Backend KYC Verification - Extract face embedding - Perform
+liveness detection - Compare against stored BVN image - If similarity >=
+threshold → PASS
+
+Step 4 – FIDO2 Registration Backend generates: - challenge - rpId -
+userId - attestation preference
+
+React Native calls native FIDO2 module to create credential.
+
+OS: - Generates key pair inside Secure Enclave / StrongBox - Locks key
+to biometricCurrentSet - Returns attestation object
+
+Step 5 – Backend Validates Attestation Auth Service verifies: -
+Challenge match - Origin match - RP ID match - Attestation chain
+validity - Hardware-backed confirmation
+
+Stored Data: - UserID - DeviceID - PublicKey - CredentialID -
+BiometricType - EnrollmentTimestamp
+
+Trust Binding Created: User ↔ Verified Face ↔ Hardware Key ↔ Device
+
+============================================================ FLOW 2:
+HIGH-VALUE TRANSACTION (MFA + NON-REPUDIATION)
+============================================================
+
+Step 1 – Transaction Initiation
+
+POST /transaction/initiate { amount, beneficiary }
+
+Step 2 – Backend Generates Challenge nonce transactionHash =
+hash(amount + beneficiary + timestamp + nonce)
+
+Step 3 – FIDO2 Assertion React Native calls getAssertion(challenge).
+
+OS: - Prompts biometric - Secure Enclave signs challenge - Returns
+signed assertion
+
+Step 4 – Backend Verifies Signature Auth Service verifies: - Signature
+validity - Public key match - Challenge match - Signature counter
+(anti-replay) - Key status (not revoked)
+
+If valid → Authentication PASSED
+
+Step 5 – Risk Engine Evaluation Checks: - Device change - Biometric
+enrollment change - SIM swap - OS change - High transaction amount -
+Behavioral anomalies
+
+If LOW RISK → proceed If HIGH RISK → Step-up KYC
+
+============================================================ FLOW 3:
+STEP-UP FACE VERIFICATION
+============================================================
+
+React Native: - Capture new selfie - Send to backend
+
+Backend: - Compare with stored face embedding - Verify liveness - If
+match → approve - If fail → block and flag
+
+============================================================ BIOMETRIC
+SUBSTITUTION PROTECTION
+============================================================
+
+At key creation:
+
+iOS: - biometryCurrentSet
+
+Android: - setInvalidatedByBiometricEnrollment(true)
+
+If new biometric is added: - Hardware deletes private key - FIDO2
+assertion fails - Full re-registration + KYC required
+
+============================================================ AUDIT LOG
+STRUCTURE ============================================================
+
+Stored per transaction: - TransactionID - UserID - DeviceID -
+PublicKeyID - Nonce - TransactionHash - DigitalSignature -
+BiometricModality (FACE/FINGER) - Timestamp - RiskScore - IP Address
+
+Provides: - Cryptographic non-repudiation - Regulatory traceability -
+Legal defensibility
+
+============================================================ TRUST MODEL
+SUMMARY ============================================================
+
+TLS → Secure transport FIDO2 → Same device + biometric Attestation →
+Hardware-backed key Face KYC → Same human Liveness → Real human presence
+Risk Engine → Fraud detection Audit Logs → Legal evidence
+
+============================================================ SECURITY
+OUTCOME ============================================================
+
+-   Passwordless capability
+-   Phishing resistance
+-   Device binding
+-   Biometric integrity
+-   Identity continuity
+-   Non-repudiation
+-   Regulatory defensibility
+
+Tier-1 Bank Architecture Model

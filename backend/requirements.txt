@@ -21,6 +21,15 @@ httpx>=0.26.0
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
 
+# FIDO2 / WebAuthn (Passkey) server
+fido2>=2.0.0
+
+# Device-bound key auth (Ed25519 verify)
+cryptography>=42.0.0
+
+# Firestore (Google Cloud)
+google-cloud-firestore>=2.16.0
+
 # Logging
 python-json-logger>=2.0.7
 

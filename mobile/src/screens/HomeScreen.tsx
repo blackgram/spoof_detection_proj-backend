@@ -1,11 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../context/AuthContext';
-import { getAccounts } from '../api/transactions';
+import { useAccountsQuery } from '../query/hooks';
 import { colors, radius, spacing } from '../theme';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -13,8 +13,6 @@ type Nav = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 export default function HomeScreen() {
   const { user, customerId, getProfile } = useAuth();
   const navigation = useNavigation<Nav>();
-  const [balance, setBalance] = useState<number | null>(null);
-  const [balanceLoading, setBalanceLoading] = useState(false);
   const [showEnableBiometricsModal, setShowEnableBiometricsModal] = useState(false);
   const [enableBiometricsDismissedThisSession, setEnableBiometricsDismissedThisSession] = useState(false);
   const greeting = getGreeting();
@@ -30,7 +28,7 @@ export default function HomeScreen() {
 
   const handleEnableBiometrics = () => {
     setShowEnableBiometricsModal(false);
-    navigation.navigate('KYCBvn', { reason: 'biometrics' });
+    navigation.navigate('TransactionPin', { next: { type: 'enable_biometrics' } });
   };
 
   const handleNotNow = () => {
@@ -38,28 +36,10 @@ export default function HomeScreen() {
     setEnableBiometricsDismissedThisSession(true);
   };
 
-  const loadBalance = useCallback(async () => {
-    if (!customerId) {
-      setBalance(null);
-      return;
-    }
-    setBalanceLoading(true);
-    try {
-      const accounts = await getAccounts(customerId);
-      const first = accounts[0];
-      setBalance(first ? first.balance_ngn : 0);
-    } catch {
-      setBalance(null);
-    } finally {
-      setBalanceLoading(false);
-    }
-  }, [customerId]);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadBalance();
-    }, [loadBalance])
-  );
+  const { data: accounts, isPending: balanceLoading, isError: balanceError } =
+    useAccountsQuery(customerId);
+  const balance =
+    !customerId ? null : balanceError ? null : (accounts?.[0]?.balance_ngn ?? 0);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
@@ -118,9 +98,9 @@ export default function HomeScreen() {
           style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
           onPress={() => navigation.navigate('Transfer', undefined)}
         >
-          <View style={styles.actionIcon}>
+          {/* <View style={styles.actionIcon}>
             <Text style={styles.actionEmoji}>💸</Text>
-          </View>
+          </View> */}
           <View style={styles.actionTextWrap}>
             <Text style={styles.actionTitle}>Transfer</Text>
             <Text style={styles.actionSubtitle}>Other banks & more</Text>
@@ -128,9 +108,9 @@ export default function HomeScreen() {
           <Text style={styles.actionChevron}>›</Text>
         </Pressable>
 
-        <Pressable
+        {/* <Pressable
           style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
-          onPress={() => navigation.navigate('Settings', undefined)}
+          onPress={() => navigation.navigate('MainTabs' as never)}
         >
           <View style={styles.actionIcon}>
             <Text style={styles.actionEmoji}>⚙️</Text>
@@ -140,7 +120,7 @@ export default function HomeScreen() {
             <Text style={styles.actionSubtitle}>Limit & security</Text>
           </View>
           <Text style={styles.actionChevron}>›</Text>
-        </Pressable>
+        </Pressable> */}
       </View>
     </SafeAreaView>
   );

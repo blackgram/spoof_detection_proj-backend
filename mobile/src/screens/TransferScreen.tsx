@@ -11,23 +11,17 @@ import {
   KeyboardAvoidingView,
   Platform,
   FlatList,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { useAccountsQuery, useKycStatusQuery, useAccountLookupQuery } from '../query/hooks';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
-import * as LocalAuthentication from 'expo-local-authentication';
 import { useAuth } from '../context/AuthContext';
-import { getKycStatus } from '../api/kyc';
-import {
-  getTransactionChallenge,
-  verifyTransaction,
-} from '../api/deviceAuth';
-import { signChallengeAfterBiometrics } from '../lib/deviceKey';
-import { getAccounts, transfer, type TransferAuditPayload } from '../api/transactions';
 import { colors, radius, spacing } from '../theme';
 import { KYC_AMOUNT_THRESHOLD_NGN, MAX_TRANSFER_AMOUNT_NGN } from '../constants';
+
+const COMMISSION_NGN = 10.75;
 
 const DUMMY_BANKS = [
   { id: '1', name: 'Access Bank' },
@@ -35,9 +29,9 @@ const DUMMY_BANKS = [
   { id: '3', name: 'Zenith Bank' },
   { id: '4', name: 'First Bank' },
   { id: '5', name: 'UBA' },
+  { id: '6', name: 'Kuda Microfinance Bank' },
 ];
 
-/** Format amount string with thousand separators (e.g. 1000000.50 -> "1,000,000.50") */
 function formatAmountWithCommas(raw: string): string {
   const cleaned = raw.replace(/,/g, '').replace(/[^\d.]/g, '');
   const parts = cleaned.split('.');
@@ -46,7 +40,6 @@ function formatAmountWithCommas(raw: string): string {
   return decPart ? `${intPart}.${decPart}` : intPart;
 }
 
-/** Parse amount string (with commas) to number */
 function parseAmountValue(amountStr: string): number {
   const cleaned = (amountStr || '').replace(/,/g, '').trim();
   const num = parseFloat(cleaned);
@@ -55,83 +48,41 @@ function parseAmountValue(amountStr: string): number {
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Transfer'>;
 
-function buildAuditPayload(
-  userId: string,
-  deviceId: string,
-  biometricModality: 'FACE' | 'FINGER'
-): TransferAuditPayload {
-  const ts = Date.now();
-  return {
-    user_id: userId,
-    device_id: deviceId,
-    public_key_id: 'poc',
-    nonce: `n-${ts}`,
-    transaction_hash: `h-${ts}`,
-    digital_signature: 's-poc',
-    biometric_modality: biometricModality,
-  };
-}
-
 export default function TransferScreen() {
-  const { kycCompleted, customerId, user, getDeviceId } = useAuth();
+  const { kycCompleted, customerId } = useAuth();
   const navigation = useNavigation<Nav>();
   const route = useRoute();
   const params = route.params as { kycSuccess?: boolean } | undefined;
+
   const [accountNumber, setAccountNumber] = useState('');
   const [amount, setAmount] = useState('');
   const [narration, setNarration] = useState('');
-  const [step, setStep] = useState<'form' | 'confirm' | 'auth' | 'kyc_prompt'>('form');
-  const [loading, setLoading] = useState(false);
-  const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const [step, setStep] = useState<'form' | 'kyc_prompt'>('form');
   const [bankDropdownVisible, setBankDropdownVisible] = useState(false);
   const [selectedBank, setSelectedBank] = useState<{ id: string; name: string } | null>(null);
-  const [transferLimit, setTransferLimit] = useState<number | null>(null);
-  const [limitLoading, setLimitLoading] = useState(false);
-  const [balance, setBalance] = useState<number | null>(null);
-  const [balanceLoading, setBalanceLoading] = useState(false);
   const [bankTouched, setBankTouched] = useState(false);
   const [accountNumberTouched, setAccountNumberTouched] = useState(false);
   const [amountTouched, setAmountTouched] = useState(false);
 
-  const loadTransferLimit = useCallback(async () => {
-    if (!customerId) {
-      setTransferLimit(null);
-      return;
-    }
-    setLimitLoading(true);
-    try {
-      const status = await getKycStatus(customerId);
-      setTransferLimit(status.current_limit_ngn ?? MAX_TRANSFER_AMOUNT_NGN);
-    } catch {
-      setTransferLimit(MAX_TRANSFER_AMOUNT_NGN);
-    } finally {
-      setLimitLoading(false);
-    }
-  }, [customerId]);
-
-  const loadBalance = useCallback(async () => {
-    if (!customerId) {
-      setBalance(null);
-      return;
-    }
-    setBalanceLoading(true);
-    try {
-      const accounts = await getAccounts(customerId);
-      const first = accounts[0];
-      setBalance(first ? first.balance_ngn : 0);
-    } catch {
-      setBalance(null);
-    } finally {
-      setBalanceLoading(false);
-    }
-  }, [customerId]);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadTransferLimit();
-      loadBalance();
-    }, [loadTransferLimit, loadBalance])
+  const { data: accounts, isPending: balanceLoading, isError: accountsError } =
+    useAccountsQuery(customerId);
+  const { data: kycStatus, isPending: limitLoading, isError: kycError } = useKycStatusQuery(customerId);
+  const { data: lookupResult, isFetching: beneficiaryLookupLoading } = useAccountLookupQuery(
+    accountNumber,
+    !!selectedBank,
   );
+
+  const firstAccount = accounts?.[0];
+  const balance =
+    !customerId ? null : accountsError ? null : (firstAccount?.balance_ngn ?? 0);
+  const senderAccountNumber = firstAccount?.account_number ?? '';
+  const senderAccountType = firstAccount?.account_type ?? 'current';
+  const transferLimit = !customerId
+    ? null
+    : kycError
+      ? MAX_TRANSFER_AMOUNT_NGN
+      : (kycStatus?.current_limit_ngn ?? MAX_TRANSFER_AMOUNT_NGN);
+  const beneficiaryName = lookupResult?.customer_name ?? null;
 
   const effectiveLimit = transferLimit ?? MAX_TRANSFER_AMOUNT_NGN;
   const amountNum = parseAmountValue(amount);
@@ -139,118 +90,40 @@ export default function TransferScreen() {
   const canProceed =
     !!customerId &&
     !!selectedBank &&
-    accountNumber.trim().length > 0 &&
+    accountNumber.trim().length === 10 &&
     amountNum > 0 &&
     amountNum <= effectiveLimit;
 
   const handleProceed = () => {
-    if (!canProceed) return;
-    // High-value (≥ threshold): require device biometrics only. Show KYC prompt only if user hasn't completed onboarding.
+    if (!canProceed || !customerId || !selectedBank) return;
     if (requiresKYC && !kycCompleted) {
       setStep('kyc_prompt');
-    } else {
-      setStep('auth');
+      return;
     }
-  };
-
-  const handleAuthWithPasskey = async () => {
-    if (!customerId) return;
-    setLoading(true);
-    try {
-      console.log('[Transfer] handleAuthWithPasskey: step 1 → getTransactionChallenge', { customerId, amountNum, account: accountNumber.trim() });
-      const { state_id, challenge: txChallenge } = await getTransactionChallenge(
-        customerId,
-        amountNum,
-        accountNumber.trim()
-      );
-      console.log('[Transfer] handleAuthWithPasskey: step 2 → sign (biometric prompt) state_id=', state_id);
-      const signature = await signChallengeAfterBiometrics(txChallenge);
-      console.log('[Transfer] handleAuthWithPasskey: step 3 → verifyTransaction');
-      const { getDeviceName } = await import('../lib/deviceInfo');
-      const deviceName = getDeviceName();
-      await verifyTransaction(state_id, signature, deviceName);
-      console.log('[Transfer] handleAuthWithPasskey: step 4 → transfer with state_id');
-      await transfer({
-        sender_customer_id: customerId,
-        beneficiary_account_number: accountNumber.trim(),
-        amount_ngn: amountNum,
-        audit: buildAuditPayload(user?.userId ?? customerId, getDeviceId(), 'FACE'),
-        state_id,
-      });
-      console.log('[Transfer] handleAuthWithPasskey: step 5 → done, success');
-      setSuccessModalVisible(true);
-      setStep('form');
-      setSelectedBank(null);
-      setAccountNumber('');
-      setAmount('');
-      setNarration('');
-      loadBalance();
-    } catch (e) {
-      console.log('[Transfer] handleAuthWithPasskey: failed', e instanceof Error ? e.message : e);
-      Alert.alert('Transfer failed', e instanceof Error ? e.message : 'Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAuthForLowValue = async (useBiometric: boolean) => {
-    if (!customerId) return;
-    setLoading(true);
-    try {
-      if (useBiometric) {
-        const { success } = await LocalAuthentication.authenticateAsync({
-          promptMessage: 'Authenticate to complete transfer',
-          fallbackLabel: 'Use PIN',
-        });
-        if (!success) {
-          setLoading(false);
-          return;
-        }
-      } else {
-        await new Promise((r) => setTimeout(r, 300));
-      }
-      await transfer({
-        sender_customer_id: customerId,
-        beneficiary_account_number: accountNumber.trim(),
-        amount_ngn: amountNum,
-        audit: buildAuditPayload(
-          user?.userId ?? customerId,
-          getDeviceId(),
-          useBiometric ? 'FINGER' : 'FACE'
-        ),
-      });
-      setSuccessModalVisible(true);
-      setStep('form');
-      setSelectedBank(null);
-      setAccountNumber('');
-      setAmount('');
-      setNarration('');
-      loadBalance();
-    } catch (e) {
-      Alert.alert('Transfer failed', e instanceof Error ? e.message : 'Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    navigation.navigate('Review', {
+      senderAccountNumber,
+      senderAccountType,
+      amount: amountNum,
+      beneficiaryAccountNumber: accountNumber.trim(),
+      beneficiaryName: beneficiaryName ?? accountNumber.trim(),
+      bankName: selectedBank.name,
+      narration,
+      customerId,
+    });
   };
 
   const handleStartKYC = () => {
     setStep('form');
-    // Only shown when !kycCompleted (high-value + not onboarded). Limit increase still uses KYC flow.
     navigation.navigate('KYCBvn', { reason: 'transfer' });
   };
 
   useFocusEffect(
     React.useCallback(() => {
       if (params?.kycSuccess) {
-        setSuccessModalVisible(true);
         navigation.setParams({ kycSuccess: false });
       }
-    }, [params?.kycSuccess])
+    }, [params?.kycSuccess]),
   );
-
-  const closeSuccessModal = () => {
-    setSuccessModalVisible(false);
-  };
 
   if (step === 'kyc_prompt') {
     return (
@@ -261,61 +134,15 @@ export default function TransferScreen() {
             High-value transfers (₦500,000 and above) require KYC onboarding first.
           </Text>
           <Text style={styles.kycSub}>
-            Complete onboarding once; after that you’ll authorize high-value transfers with device biometrics.
+            Complete onboarding once; after that you'll authorize high-value transfers with device
+            biometrics.
           </Text>
-          <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.primaryButtonPressed]} onPress={handleStartKYC}>
+          <Pressable
+            style={({ pressed }) => [styles.primaryButton, pressed && styles.primaryButtonPressed]}
+            onPress={handleStartKYC}
+          >
             <Text style={styles.primaryButtonText}>Continue to KYC</Text>
           </Pressable>
-          <Pressable style={styles.backButton} onPress={() => setStep('form')}>
-            <Text style={styles.backButtonText}>Back</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (step === 'auth') {
-    const highValueTransfer = requiresKYC;
-    return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
-        <View style={styles.kycPromptCard}>
-          <Text style={styles.kycTitle}>Confirm transfer</Text>
-          <Text style={styles.kycMessage}>
-            Amount: ₦ {amountNum.toLocaleString()} to {accountNumber}
-          </Text>
-          <Text style={styles.authHint}>
-            {highValueTransfer
-              ? 'High-value transfer: authorize with device biometrics (Face ID or fingerprint).'
-              : 'Authorize with biometrics or fallback to PIN.'}
-          </Text>
-          {loading ? (
-            <ActivityIndicator size="large" color={colors.primary} style={{ marginVertical: 16 }} />
-          ) : (
-            <>
-              <Pressable
-                style={({ pressed }) => [styles.primaryButton, pressed && styles.primaryButtonPressed]}
-                onPress={handleAuthWithPasskey}
-              >
-                <Text style={styles.primaryButtonText}>Confirm with Biometrics</Text>
-              </Pressable>
-              {!highValueTransfer && (
-                <>
-                  <Pressable
-                    style={({ pressed }) => [styles.secondaryButton, pressed && styles.primaryButtonPressed]}
-                    onPress={() => handleAuthForLowValue(true)}
-                  >
-                    <Text style={styles.secondaryButtonText}>Use biometrics (fallback)</Text>
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [styles.secondaryButton, pressed && styles.primaryButtonPressed]}
-                    onPress={() => handleAuthForLowValue(false)}
-                  >
-                    <Text style={styles.secondaryButtonText}>Use PIN (fallback)</Text>
-                  </Pressable>
-                </>
-              )}
-            </>
-          )}
           <Pressable style={styles.backButton} onPress={() => setStep('form')}>
             <Text style={styles.backButtonText}>Back</Text>
           </Pressable>
@@ -330,7 +157,6 @@ export default function TransferScreen() {
         <KeyboardAvoidingView
           style={styles.keyboardView}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
           <ScrollView
             style={styles.scrollView}
@@ -338,22 +164,31 @@ export default function TransferScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             keyboardDismissMode="on-drag"
+            
           >
+            {/* Account card */}
             <View style={styles.card}>
               <View style={styles.cardAccent} />
-              <Text style={styles.balanceLabel}>Current Balance</Text>
               {balanceLoading ? (
-                <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 8 }} />
+                <ActivityIndicator
+                  size="small"
+                  color={colors.primary}
+                  style={{ marginVertical: 8 }}
+                />
               ) : (
                 <Text style={styles.balance}>
                   ₦ {(balance ?? 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}
                 </Text>
               )}
               <Text style={styles.accountInfo}>
-                {!customerId ? 'Complete KYC to transfer' : 'CURRENT ACCOUNT • REGULAR'}
+                {!customerId
+                  ? 'Complete KYC to transfer'
+                  : `${senderAccountType.toUpperCase()}  ACCOUNT`}
               </Text>
+              <Text style={styles.accountStatus}>Account Status: REGULAR</Text>
             </View>
 
+            {/* Limit info */}
             {limitLoading ? (
               <View style={styles.limitRow}>
                 <ActivityIndicator size="small" color={colors.primary} />
@@ -364,71 +199,127 @@ export default function TransferScreen() {
                 <Text style={styles.limitText}>
                   Daily Transaction Limit: ₦ {effectiveLimit.toLocaleString()}
                 </Text>
-                <Text style={styles.limitSub}>₦ 0.00 used • ₦ {effectiveLimit.toLocaleString()} remaining</Text>
+                <View style={styles.limitBar}>
+                  <View style={styles.limitBarFill} />
+                </View>
+                <View style={styles.limitUsageRow}>
+                  <Text style={styles.limitUsageText}>
+                    ₦ 0.00 used
+                  </Text>
+                  <Text style={styles.limitUsageText}>
+                    ₦ {effectiveLimit.toLocaleString()} remaining
+                  </Text>
+                </View>
               </>
             )}
 
+            {/* Form fields */}
             <View style={styles.form}>
-              <Text style={styles.label}>Bank</Text>
-              <Pressable
-                style={[styles.dropdownTrigger, bankTouched && !selectedBank && styles.inputError]}
-                onPress={() => setBankDropdownVisible(true)}
-              >
-                <Text style={selectedBank ? styles.dropdownText : styles.dropdownPlaceholder}>
-                  {selectedBank ? selectedBank.name : 'Select bank'}
-                </Text>
-                <Text style={styles.dropdownChevron}>▼</Text>
-              </Pressable>
+              <View style={styles.fieldCard}>
+                <Text style={styles.fieldCardLabel}>Bank</Text>
+                <Pressable
+                  style={[
+                    styles.dropdownTrigger,
+                    bankTouched && !selectedBank && styles.inputError,
+                  ]}
+                  onPress={() => setBankDropdownVisible(true)}
+                >
+                  <Text
+                    style={selectedBank ? styles.dropdownText : styles.dropdownPlaceholder}
+                  >
+                    {selectedBank ? selectedBank.name : 'Select bank'}
+                  </Text>
+                  <Text style={styles.dropdownChevron}>▼</Text>
+                </Pressable>
+              </View>
               {bankTouched && !selectedBank && (
                 <Text style={styles.fieldError}>Please select a bank to proceed.</Text>
               )}
 
-              <Text style={styles.label}>Beneficiary Account Number</Text>
-              <TextInput
-                style={[styles.input, accountNumberTouched && accountNumber.trim().length !== 10 && styles.inputError]}
-                placeholder="Account number"
-                placeholderTextColor={colors.textMuted}
-                value={accountNumber}
-                onChangeText={setAccountNumber}
-                onBlur={() => {
-                  setAccountNumberTouched(true);
-                  setBankTouched(true);
-                }}
-                keyboardType="number-pad"
-              />
+              <View style={styles.fieldCard}>
+                <Text style={styles.fieldCardLabel}>Beneficiary Account Number</Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    accountNumberTouched &&
+                      accountNumber.trim().length !== 10 &&
+                      styles.inputError,
+                  ]}
+                  placeholder="Account number"
+                  placeholderTextColor={colors.textMuted}
+                  value={accountNumber}
+                  onChangeText={setAccountNumber}
+                  onBlur={() => {
+                    setAccountNumberTouched(true);
+                    setBankTouched(true);
+                  }}
+                  keyboardType="number-pad"
+                  maxLength={10}
+                />
+                {beneficiaryLookupLoading && (
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.primary}
+                    style={{ alignSelf: 'flex-end', marginTop: -4 }}
+                  />
+                )}
+                {beneficiaryName && !beneficiaryLookupLoading && (
+                  <Text style={styles.beneficiaryName}>{beneficiaryName}</Text>
+                )}
+              </View>
               {accountNumberTouched && accountNumber.trim().length !== 10 && (
                 <Text style={styles.fieldError}>Account number must be 10 digits.</Text>
               )}
 
-              <Text style={styles.label}>₦ Amount</Text>
-              <TextInput
-                style={[styles.input, amountTouched && amountNum > effectiveLimit && styles.inputError]}
-                placeholder="0.00"
-                placeholderTextColor={colors.textMuted}
-                value={amount}
-                onChangeText={(text) => setAmount(formatAmountWithCommas(text))}
-                onBlur={() => {
-                  setAmountTouched(true);
-                  setBankTouched(true);
-                }}
-                keyboardType="decimal-pad"
-              />
+              <View style={styles.fieldCard}>
+                <Text style={styles.fieldCardLabel}>Amount</Text>
+                <View style={styles.amountRow}>
+                  <Text style={styles.nairaSymbol}>₦</Text>
+                  <TextInput
+                    style={[
+                      styles.amountInput,
+                      amountTouched && amountNum > effectiveLimit && styles.inputError,
+                    ]}
+                    placeholder="0.00"
+                    placeholderTextColor={colors.textMuted}
+                    value={amount}
+                    onChangeText={(text) => setAmount(formatAmountWithCommas(text))}
+                    onBlur={() => {
+                      setAmountTouched(true);
+                      setBankTouched(true);
+                    }}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              </View>
               {amountTouched && amountNum > 0 && amountNum > effectiveLimit && (
                 <Text style={styles.fieldError}>Amount is above transaction limit.</Text>
               )}
-              <Text style={styles.hint}>
-                Maximum: ₦ {effectiveLimit.toLocaleString()}. Amounts ≥ ₦500,000 require biometric authorization.
-              </Text>
-              <Text style={styles.label}>Narration</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Optional"
-                placeholderTextColor={colors.textMuted}
-                value={narration}
-                onChangeText={setNarration}
-              />
+              <View style={styles.amountMeta}>
+                <Text style={styles.hint}>
+                  Maximum Transaction Amount:{' '}
+                  <Text style={styles.hintHighlight}>
+                    ₦ {effectiveLimit.toLocaleString('en-NG', { minimumFractionDigits: 2 })}
+                  </Text>
+                </Text>
+                <Text style={styles.commissionText}>
+                  Commission: <Text style={styles.hintHighlight}>₦ {COMMISSION_NGN.toFixed(2)}</Text>
+                </Text>
+              </View>
+
+              <View style={styles.fieldCard}>
+                <Text style={styles.fieldCardLabel}>Narration</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Narration"
+                  placeholderTextColor={colors.textMuted}
+                  value={narration}
+                  onChangeText={setNarration}
+                />
+              </View>
             </View>
 
+            {/* Proceed button */}
             <Pressable
               style={({ pressed }) => [
                 styles.primaryButton,
@@ -444,6 +335,7 @@ export default function TransferScreen() {
         </KeyboardAvoidingView>
       </SafeAreaView>
 
+      {/* Bank dropdown modal */}
       <Modal visible={bankDropdownVisible} transparent animationType="fade">
         <Pressable
           style={styles.dropdownOverlay}
@@ -459,7 +351,10 @@ export default function TransferScreen() {
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
                 <Pressable
-                  style={({ pressed }) => [styles.dropdownItem, pressed && styles.dropdownItemPressed]}
+                  style={({ pressed }) => [
+                    styles.dropdownItem,
+                    pressed && styles.dropdownItemPressed,
+                  ]}
                   onPress={() => {
                     setSelectedBank(item);
                     setBankDropdownVisible(false);
@@ -481,18 +376,6 @@ export default function TransferScreen() {
           </View>
         </Pressable>
       </Modal>
-
-      <Modal visible={successModalVisible} transparent animationType="fade">
-        <Pressable style={styles.modalOverlay} onPress={closeSuccessModal}>
-          <View style={styles.successCard}>
-            <Text style={styles.successTitle}>Transfer successful</Text>
-            <Text style={styles.successMessage}>Your transfer has been completed.</Text>
-            <Pressable style={({ pressed }) => [styles.primaryButton, pressed && styles.primaryButtonPressed]} onPress={closeSuccessModal}>
-              <Text style={styles.primaryButtonText}>Done</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
     </>
   );
 }
@@ -501,7 +384,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   keyboardView: { flex: 1 },
   scrollView: { flex: 1 },
-  scrollContent: { padding: spacing.lg, paddingBottom: spacing.xxl, flexGrow: 1 },
+  scrollContent: { padding: spacing.lg, paddingTop: 0, paddingBottom: spacing.xxl, flexGrow: 1 },
+
+  /* Account card */
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
@@ -512,9 +397,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
-  balanceLabel: { fontSize: 13, color: colors.textSecondary, marginBottom: 4 },
-  balance: { fontSize: 22, fontWeight: '700', color: colors.text },
-  accountInfo: { fontSize: 12, color: colors.textMuted, marginTop: spacing.sm },
   cardAccent: {
     position: 'absolute',
     top: 0,
@@ -523,26 +405,138 @@ const styles = StyleSheet.create({
     height: 3,
     backgroundColor: colors.primary,
   },
-  limitRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.lg },
-  limitText: { fontSize: 14, color: colors.textSecondary, marginBottom: 4 },
+  balance: { fontSize: 22, fontWeight: '700', color: colors.text },
+  accountInfo: { fontSize: 13, color: colors.textSecondary, marginTop: spacing.sm },
+  accountStatus: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+
+  /* Limit */
+  limitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  limitText: { fontSize: 14, color: colors.textSecondary, marginBottom: spacing.sm },
+  limitBar: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.border,
+    marginBottom: spacing.xs,
+    overflow: 'hidden',
+  },
+  limitBarFill: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
+    width: '0%',
+  },
+  limitUsageRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: spacing.lg,
+  },
+  limitUsageText: { fontSize: 12, color: colors.textMuted },
   limitSub: { fontSize: 13, color: colors.textMuted, marginBottom: spacing.lg },
+
+  /* Form */
   form: { marginBottom: spacing.lg },
-  label: { fontSize: 14, fontWeight: '600', color: colors.textSecondary, marginBottom: spacing.sm },
+  fieldCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    paddingHorizontal: spacing.md,
+    paddingTop: 10,
+    paddingBottom: 4,
+    marginBottom: spacing.md,
+  },
+  fieldCardLabel: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginBottom: 4,
+  },
   dropdownTrigger: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.inputBg,
-    borderRadius: radius.md,
-    paddingVertical: 14,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+    paddingVertical: 10,
   },
   dropdownText: { fontSize: 16, color: colors.text },
   dropdownPlaceholder: { fontSize: 16, color: colors.textMuted },
   dropdownChevron: { fontSize: 10, color: colors.textMuted },
+  input: {
+    fontSize: 16,
+    color: colors.text,
+    paddingVertical: 10,
+  },
+  amountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  nairaSymbol: {
+    fontSize: 16,
+    color: colors.textMuted,
+    marginRight: spacing.xs,
+  },
+  amountInput: {
+    flex: 1,
+    fontSize: 16,
+    color: colors.text,
+    paddingVertical: 10,
+  },
+  amountMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
+  },
+  hint: { fontSize: 11, color: colors.textMuted },
+  hintHighlight: { color: colors.primary, fontWeight: '600' },
+  commissionText: { fontSize: 11, color: colors.textMuted },
+  beneficiaryName: {
+    fontSize: 13,
+    color: colors.text,
+    fontWeight: '600',
+    textAlign: 'right',
+    paddingBottom: 6,
+  },
+  fieldError: {
+    fontSize: 13,
+    color: colors.error,
+    marginTop: -spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  inputError: { borderColor: colors.error },
+
+  /* Buttons */
+  primaryButton: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  primaryButtonPressed: { opacity: 0.9 },
+  primaryButtonDisabled: { backgroundColor: colors.disabled },
+  primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  backButton: { marginTop: spacing.lg, alignItems: 'center' },
+  backButtonText: { color: colors.primary, fontSize: 15, fontWeight: '600' },
+
+  /* KYC prompt */
+  kycPromptCard: {
+    flex: 1,
+    padding: spacing.lg,
+    justifyContent: 'center',
+  },
+  kycTitle: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: spacing.sm },
+  kycMessage: {
+    fontSize: 15,
+    color: colors.textSecondary,
+    lineHeight: 22,
+    marginBottom: spacing.sm,
+  },
+  kycSub: { fontSize: 14, color: colors.textMuted, marginBottom: spacing.lg },
+
+  /* Bank dropdown modal */
   dropdownOverlay: {
     flex: 1,
     backgroundColor: colors.overlay,
@@ -559,7 +553,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
-  dropdownTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: spacing.md },
+  dropdownTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
   dropdownItem: {
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
@@ -570,70 +569,4 @@ const styles = StyleSheet.create({
   dropdownItemText: { fontSize: 16, color: colors.text },
   dropdownCancel: { marginTop: spacing.sm, alignItems: 'center', paddingVertical: spacing.sm },
   cancelButtonText: { color: colors.primary, fontSize: 15, fontWeight: '600' },
-  input: {
-    backgroundColor: colors.inputBg,
-    borderRadius: radius.md,
-    paddingVertical: 14,
-    paddingHorizontal: spacing.md,
-    fontSize: 16,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing.md,
-  },
-  hint: { fontSize: 12, color: colors.textMuted, marginBottom: spacing.md },
-  fieldError: {
-    fontSize: 13,
-    color: colors.error,
-    marginTop: -spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  inputError: { borderColor: colors.error },
-  primaryButton: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  primaryButtonPressed: { opacity: 0.9 },
-  primaryButtonDisabled: { backgroundColor: colors.disabled },
-  primaryButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  secondaryButton: {
-    marginTop: spacing.sm,
-    paddingVertical: 16,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: colors.primary,
-    borderRadius: radius.md,
-  },
-  secondaryButtonText: { color: colors.primary, fontSize: 16, fontWeight: '600' },
-  backButton: { marginTop: spacing.lg, alignItems: 'center' },
-  backButtonText: { color: colors.primary, fontSize: 15, fontWeight: '600' },
-  kycPromptCard: {
-    flex: 1,
-    padding: spacing.lg,
-    justifyContent: 'center',
-  },
-  kycTitle: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: spacing.sm },
-  kycMessage: { fontSize: 15, color: colors.textSecondary, lineHeight: 22, marginBottom: spacing.sm },
-  kycSub: { fontSize: 14, color: colors.textMuted, marginBottom: spacing.lg },
-  authHint: { fontSize: 14, color: colors.textSecondary, marginBottom: spacing.lg },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: colors.overlay,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.lg,
-  },
-  successCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.xl,
-    padding: spacing.xl - 4,
-    width: '100%',
-    maxWidth: 340,
-    borderWidth: 1,
-    borderColor: colors.primaryMuted,
-  },
-  successTitle: { fontSize: 20, fontWeight: '700', color: colors.success, marginBottom: spacing.sm, textAlign: 'center' },
-  successMessage: { fontSize: 15, color: colors.textSecondary, marginBottom: spacing.lg, textAlign: 'center' },
 });

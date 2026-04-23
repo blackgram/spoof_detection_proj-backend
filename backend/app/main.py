@@ -60,13 +60,15 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
-from app.routers import customers, device_auth, fido2, kyc, transactions
+from app.routers import customers, device_auth, fido2, kyc, push_auth, totp, transactions
 from app.db.firestore_client import FirestoreClient
 
 app.include_router(customers.router)
 app.include_router(device_auth.router)
 app.include_router(fido2.router)
 app.include_router(kyc.router)
+app.include_router(push_auth.router)
+app.include_router(totp.router)
 app.include_router(transactions.router)
 
 # CORS middleware

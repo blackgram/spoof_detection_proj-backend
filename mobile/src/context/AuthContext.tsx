@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
+import { clearTotpAccounts } from '../lib/totpSecureStore';
+import { queryClient } from '../query/queryClient';
 
 const DEVICE_ID_KEY = 'accessmore_device_id';
 const USER_KEY = 'accessmore_user';
@@ -30,12 +32,15 @@ export interface AuthState {
 
 interface AuthContextValue extends AuthState {
   login: (username: string, password: string) => Promise<void>;
+  /** Set session after registration or device-change flow (customer already exists, KYC just completed). */
+  loginAfterRegistration: (username: string, customerId: string) => Promise<void>;
   /** Device-key + biometric login; requires username to have completed "Enable biometrics" (KYC + device key register). */
   loginWithBiometrics: (username: string) => Promise<void>;
   getProfile: (username: string) => Promise<BiometricProfile | null>;
   setBiometricsForUsername: (username: string, customerId: string) => Promise<void>;
   clearBiometricsForUsername: (username: string) => Promise<void>;
   getLastUsername: () => Promise<string | null>;
+  setLastUsernameForLogin: (username: string) => Promise<void>;
   logout: () => Promise<void>;
   completeKYC: () => Promise<void>;
   completeKYCWithCustomerId: (customerId: string) => Promise<void>;
@@ -137,7 +142,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return SecureStore.getItemAsync(LAST_USERNAME_KEY);
   }, []);
 
+  const setLastUsernameForLogin = useCallback(async (username: string) => {
+    const name = username.trim();
+    if (!name) return;
+    try {
+      await SecureStore.setItemAsync(LAST_USERNAME_KEY, name);
+    } catch (e) {
+      console.warn('setLastUsernameForLogin failed', e);
+    }
+  }, []);
+
   const login = useCallback(async (username: string, _password: string) => {
+    const prevCustomerId = await SecureStore.getItemAsync(CUSTOMER_ID_KEY);
     const name = username.trim() || 'User';
     const deviceId = getDeviceFingerprint();
 
@@ -166,10 +182,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setDeviceChanged(false);
     const existingKyc = await SecureStore.getItemAsync(KYC_KEY);
     setKycCompletedState(existingKyc === 'true');
+    const cid = customerIdToStore ?? (await SecureStore.getItemAsync(CUSTOMER_ID_KEY));
+    if (prevCustomerId && cid && prevCustomerId !== cid) {
+      await clearTotpAccounts();
+    }
+    if (cid) {
+      registerPushTokenIfPossible(cid);
+    }
+  }, []);
+
+  async function registerPushTokenIfPossible(cid: string) {
+    try {
+      const { registerForPushNotificationsAsync } = await import('../lib/pushNotifications');
+      const { registerPushToken } = await import('../api/pushAuth');
+      const token = await registerForPushNotificationsAsync();
+      if (token) {
+        await registerPushToken(cid, token);
+        console.log('[Auth] Push token registered for push authorization');
+      } else {
+        console.warn('[Auth] No push token (use a physical device, grant notification permission, and ensure app has EAS projectId)');
+      }
+    } catch (e) {
+      console.warn('[Auth] Push token registration failed:', e);
+    }
+  }
+
+  const loginAfterRegistration = useCallback(async (username: string, cid: string) => {
+    await clearTotpAccounts();
+    const name = username.trim() || 'User';
+    const deviceId = getDeviceFingerprint();
+    const userData: User = { userId: cid, name };
+    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(userData));
+    await SecureStore.setItemAsync(DEVICE_ID_KEY, deviceId);
+    await SecureStore.setItemAsync(LAST_USERNAME_KEY, name);
+    await SecureStore.setItemAsync(CUSTOMER_ID_KEY, cid);
+    await SecureStore.setItemAsync(KYC_KEY, 'true');
+    setUser(userData);
+    setCustomerId(cid);
+    setKycCompletedState(true);
+    setDeviceChanged(false);
+    registerPushTokenIfPossible(cid);
   }, []);
 
   const loginWithBiometrics = useCallback(
     async (username: string) => {
+      const prevCustomerId = await SecureStore.getItemAsync(CUSTOMER_ID_KEY);
       console.log('[Auth] loginWithBiometrics: start username=', username);
       const profile = await getProfile(username);
       if (!profile?.hasBiometrics || !profile.customerId) {
@@ -196,11 +253,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setCustomerId(profile.customerId);
       setKycCompletedState(true);
       setDeviceChanged(false);
+      if (prevCustomerId && prevCustomerId !== profile.customerId) {
+        await clearTotpAccounts();
+      }
+      registerPushTokenIfPossible(profile.customerId);
     },
     [getProfile]
   );
 
   const logout = useCallback(async () => {
+    queryClient.clear();
+    await clearTotpAccounts();
     await SecureStore.deleteItemAsync(USER_KEY);
     await SecureStore.deleteItemAsync(DEVICE_ID_KEY);
     await SecureStore.deleteItemAsync(KYC_KEY);
@@ -209,7 +272,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setKycCompletedState(false);
     setCustomerId(null);
     setDeviceChanged(false);
-  }, []); // Note: we do not clear BIOMETRIC_PROFILES_KEY or LAST_USERNAME_KEY on logout so profiles and prefill persist
+  }, []); // Note: we do not clear BIOMETRIC_PROFILES_KEY or LAST_USERNAME_KEY on logout so profiles and prefill persist; TOTP is cleared above
 
   const completeKYC = useCallback(async () => {
     await SecureStore.setItemAsync(KYC_KEY, 'true');
@@ -251,11 +314,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     customerId,
     deviceChanged,
     login,
+    loginAfterRegistration,
     loginWithBiometrics,
     getProfile,
     setBiometricsForUsername,
     clearBiometricsForUsername,
     getLastUsername,
+    setLastUsernameForLogin,
     logout,
     completeKYC,
     completeKYCWithCustomerId,

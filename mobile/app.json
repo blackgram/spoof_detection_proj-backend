@@ -25,6 +25,7 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "This app needs camera access to capture your selfie for identity verification.",
+        "NSFaceIDUsageDescription": "This app uses Face ID to authorize secure device-key signatures.",
         "NSPhotoLibraryUsageDescription": "This app needs photo library access to select your ID photo.",
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
@@ -43,7 +44,10 @@
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
       ],
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,

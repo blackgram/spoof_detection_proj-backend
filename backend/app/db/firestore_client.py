@@ -25,13 +25,24 @@ COLLECTION_AUDIT_LOGS = "audit_logs"
 COLLECTION_FIDO2_CREDENTIALS = "fido2_credentials"
 COLLECTION_DEVICE_PUBLIC_KEYS = "device_public_keys"
 COLLECTION_DEVICE_AUTH_EVENTS = "device_auth_events"
+COLLECTION_AUTH_REQUESTS = "authorization_requests"
+COLLECTION_PUSH_TOKENS = "push_tokens"
 
 DEFAULT_LIMIT_NGN = 100_000
 MIN_LIMIT_NGN = 100_000
 MAX_LIMIT_NGN = 50_000_000
 
 # In-memory fallback when Firestore is not configured (e.g. tests)
-_memory_store: dict = {"customers": {}, "accounts": {}, "audit_logs": {}, "fido2_credentials": {}, "device_public_keys": {}, "device_auth_events": []}
+_memory_store: dict = {
+    "customers": {},
+    "accounts": {},
+    "audit_logs": {},
+    "fido2_credentials": {},
+    "device_public_keys": {},
+    "device_auth_events": [],
+    "authorization_requests": {},
+    "push_tokens": {},
+}
 
 # When using in-memory store, persist FIDO2 credentials to this file so they survive server restarts.
 _FIDO2_FILE = Path(__file__).resolve().parent.parent.parent / "data" / "fido2_credentials.json"
@@ -187,12 +198,18 @@ class FirestoreClient:
         email: Optional[str] = None,
         phone: Optional[str] = None,
         username: Optional[str] = None,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None,
     ) -> str:
         """Create a customer. Returns customer_id. Use bvn='' for username-only (pre-KYC) customers."""
         now = self._now()
+        fn = (first_name or "").strip() or None
+        ln = (last_name or "").strip() or None
         data = {
             "bvn": bvn or "",
             "name": name,
+            "first_name": fn,
+            "last_name": ln,
             "email": email or None,
             "phone": phone or None,
             "username": (username or "").strip() or None,
@@ -258,6 +275,31 @@ class FirestoreClient:
         c["name"] = name or ""
         c["updated_at"] = now
         return True
+
+    def store_customer_password(self, customer_id: str, password: str) -> bool:
+        """Store hashed password for customer (PoC: simple hash, no salt). Returns False if customer not found."""
+        pwd_hash = hashlib.sha256((password or "").encode()).hexdigest()
+        now = self._now()
+        if self._db:
+            ref = self._customer_doc(customer_id)
+            if not ref.get().exists:
+                return False
+            ref.update({"password_hash": pwd_hash, "updated_at": now})
+            return True
+        c = _memory_store["customers"].get(customer_id)
+        if not c:
+            return False
+        c["password_hash"] = pwd_hash
+        c["updated_at"] = now
+        return True
+
+    def verify_customer_password(self, customer_id: str, password: str) -> bool:
+        """Verify password for customer (PoC). Returns False if customer not found or no password set."""
+        cust = self.get_customer_by_id(customer_id)
+        if not cust or not cust.get("password_hash"):
+            return False
+        pwd_hash = hashlib.sha256((password or "").encode()).hexdigest()
+        return cust["password_hash"] == pwd_hash
 
     def get_customer_limit(self, customer_id: str) -> Optional[float]:
         """Return current_limit_ngn or None if customer not found."""
@@ -558,6 +600,106 @@ class FirestoreClient:
             if a.get("account_number") == account_number:
                 return dict(a)
         return None
+
+    # --- Authorization requests (push-auth) ---
+
+    def create_auth_request(self, data: dict[str, Any]) -> str:
+        """Create an authorization request. data must include customer_id, request_type, channel, details, status, created_at, expires_at. Returns request_id."""
+        if self._db:
+            ref = self._db.collection(COLLECTION_AUTH_REQUESTS).document()
+            ref.set(data)
+            return ref.id
+        request_id = str(uuid.uuid4())
+        _memory_store["authorization_requests"][request_id] = {**data, "id": request_id}
+        return request_id
+
+    def get_auth_request(self, request_id: str) -> Optional[dict]:
+        """Fetch authorization request by id. Returns None if not found."""
+        if self._db:
+            ref = self._db.collection(COLLECTION_AUTH_REQUESTS).document(request_id)
+            doc = ref.get()
+            if not doc.exists:
+                return None
+            d = doc.to_dict()
+            d["id"] = doc.id
+            return d
+        rec = _memory_store["authorization_requests"].get(request_id)
+        if not rec:
+            return None
+        return dict(rec)
+
+    def get_pending_auth_requests(self, customer_id: str) -> list[dict]:
+        """Return pending (non-expired) authorization requests for customer, newest first."""
+        now_iso = self._now()
+        if self._db:
+            q = (
+                self._db.collection(COLLECTION_AUTH_REQUESTS)
+                .where("customer_id", "==", customer_id)
+                .where("status", "==", "pending")
+                .get()
+            )
+            out = []
+            for doc in q:
+                d = doc.to_dict()
+                d["id"] = doc.id
+                if (d.get("expires_at") or "") > now_iso:
+                    out.append(d)
+            out.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+            return out
+        out = []
+        for rec in _memory_store["authorization_requests"].values():
+            if rec.get("customer_id") != customer_id or rec.get("status") != "pending":
+                continue
+            if (rec.get("expires_at") or "") <= now_iso:
+                continue
+            out.append(dict(rec))
+        out.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+        return out
+
+    def update_auth_request_status(self, request_id: str, status: str, responded_at: str) -> bool:
+        """Set status to approved or rejected. Returns False if request not found."""
+        if self._db:
+            ref = self._db.collection(COLLECTION_AUTH_REQUESTS).document(request_id)
+            doc = ref.get()
+            if not doc.exists:
+                return False
+            ref.update({"status": status, "responded_at": responded_at})
+            return True
+        rec = _memory_store["authorization_requests"].get(request_id)
+        if not rec:
+            return False
+        rec["status"] = status
+        rec["responded_at"] = responded_at
+        return True
+
+    # --- Push tokens (Expo push tokens per customer) ---
+
+    def set_push_token(self, customer_id: str, expo_push_token: str) -> None:
+        """Store or replace Expo push token for a customer."""
+        now = self._now()
+        data = {
+            "customer_id": customer_id,
+            "expo_push_token": expo_push_token,
+            "updated_at": now,
+        }
+        if self._db:
+            ref = self._db.collection(COLLECTION_PUSH_TOKENS).document(customer_id)
+            ref.set(data)
+        else:
+            _memory_store["push_tokens"][customer_id] = data
+
+    def get_push_token(self, customer_id: str) -> Optional[str]:
+        """Return Expo push token for customer, or None."""
+        if self._db:
+            ref = self._db.collection(COLLECTION_PUSH_TOKENS).document(customer_id)
+            doc = ref.get()
+            if not doc.exists:
+                return None
+            return doc.to_dict().get("expo_push_token")
+        rec = _memory_store["push_tokens"].get(customer_id)
+        if not rec:
+            return None
+        return rec.get("expo_push_token")
 
     def add_audit_log(self, entry: dict[str, Any]) -> str:
         """Append an audit log entry. Returns document/record id."""

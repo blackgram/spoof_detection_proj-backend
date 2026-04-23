@@ -51,6 +51,25 @@ export async function getAccounts(customerId: string): Promise<Account[]> {
   return res.json();
 }
 
+export interface AccountLookup {
+  account_number: string;
+  customer_name: string;
+  account_type: string;
+}
+
+/** GET /api/customers/lookup-account/{account_number} */
+export async function lookupAccount(accountNumber: string): Promise<AccountLookup> {
+  const res = await fetch(`${API_BASE_URL}/api/customers/lookup-account/${accountNumber}`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Account not found' }));
+    throw new Error(err.detail || `Status ${res.status}`);
+  }
+  return res.json();
+}
+
 /** POST /api/transactions/transfer - both sender and beneficiary must be KYC verified */
 export async function transfer(body: TransferRequest): Promise<TransferResponse> {
   const res = await fetch(`${API_BASE_URL}/api/transactions/transfer`, {

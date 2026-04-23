@@ -4,6 +4,7 @@ import { API_BASE_URL } from '../config';
 const KYC_REQUEST_TIMEOUT_MS = 360000; // 6 min
 
 export const MIN_LIMIT_NGN = 100_000;
+/** Matches backend Firestore clamp upper bound. */
 export const MAX_LIMIT_NGN = 50_000_000;
 
 export interface KycStatus {

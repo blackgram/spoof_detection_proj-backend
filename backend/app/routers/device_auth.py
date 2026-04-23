@@ -10,6 +10,7 @@ import hashlib
 import logging
 import secrets
 import uuid
+from typing import Literal
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -27,6 +28,7 @@ _challenge_store: dict[str, dict[str, Any]] = {}
 
 # Ed25519: public key 32 bytes, signature 64 bytes
 CHALLENGE_BYTES = 32
+DeviceKeyAlgorithm = Literal["ed25519", "rsa"]
 
 
 def _b64_decode(s: str) -> bytes:
@@ -63,12 +65,34 @@ def _verify_ed25519(public_key_b64: str, message: bytes, signature_b64: str) -> 
         return False
 
 
+def _verify_rsa_pkcs1v15_sha256(public_key_b64: str, payload: str, signature_b64: str) -> bool:
+    """Verify RSA PKCS#1 v1.5 SHA-256 signature over UTF-8 payload string."""
+    try:
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import padding, rsa
+
+        pk_bytes = _b64_decode(public_key_b64)
+        sig_bytes = _b64_decode(signature_b64)
+        key = serialization.load_der_public_key(pk_bytes)
+        if not isinstance(key, rsa.RSAPublicKey):
+            return False
+        key.verify(sig_bytes, payload.encode("utf-8"), padding.PKCS1v15(), hashes.SHA256())
+        return True
+    except InvalidSignature:
+        return False
+    except Exception as e:
+        logger.warning("RSA verify error: %s", e)
+        return False
+
+
 # --- Request/response models ---
 
 
 class RegisterBody(BaseModel):
     customer_id: str
-    public_key: str  # base64 Ed25519 public key (32 bytes)
+    public_key: str  # base64url raw key bytes (Ed25519 raw 32-byte key OR RSA DER public key)
+    algorithm: DeviceKeyAlgorithm = "ed25519"
 
 
 class ChallengeBody(BaseModel):
@@ -102,14 +126,24 @@ async def register(body: RegisterBody):
     """Store device public key for a customer (one key per customer). Used after KYC when enabling biometrics."""
     logger.info("[device-auth] register request: customer_id=%s public_key_len=%d", body.customer_id, len(body.public_key or ""))
     pk_b64 = body.public_key.strip()
+    algo = body.algorithm or "ed25519"
     try:
         pk_bytes = _b64_decode(pk_b64)
-        if len(pk_bytes) != 32:
+        if algo == "ed25519" and len(pk_bytes) != 32:
             raise HTTPException(status_code=400, detail="Invalid public key: expected 32 bytes (Ed25519)")
+        if algo == "rsa":
+            from cryptography.hazmat.primitives import serialization
+            from cryptography.hazmat.primitives.asymmetric import rsa
+
+            key = serialization.load_der_public_key(pk_bytes)
+            if not isinstance(key, rsa.RSAPublicKey):
+                raise HTTPException(status_code=400, detail="Invalid public key: expected RSA DER public key")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.warning("[device-auth] register invalid key: %s", e)
         raise HTTPException(status_code=400, detail=f"Invalid public key encoding: {e}")
-    db.set_device_public_key(body.customer_id, pk_b64, algorithm="ed25519")
+    db.set_device_public_key(body.customer_id, pk_b64, algorithm=algo)
     out = {"registered": True, "customer_id": body.customer_id}
     logger.info("[device-auth] register response: %s", out)
     return out
@@ -133,7 +167,7 @@ async def challenge(body: ChallengeBody):
 
 @router.post("/verify")
 async def verify(body: VerifyBody):
-    """Verify Ed25519 signature over the challenge. Returns verified=true for login success."""
+    """Verify device-auth signature over challenge. Returns verified=true for login success."""
     logger.info(
         "[device-auth] verify request: customer_id=%s challenge_len=%d signature_len=%d",
         body.customer_id, len(body.challenge or ""), len(body.signature or ""),
@@ -146,8 +180,18 @@ async def verify(body: VerifyBody):
         _challenge_store.pop(body.customer_id, None)
         raise HTTPException(status_code=400, detail="No device key registered")
     stored = _challenge_store.pop(body.customer_id)
+    challenge_b64 = stored["challenge_raw_b64"]
+    if body.challenge != challenge_b64:
+        logger.warning("[device-auth] verify: challenge mismatch for customer_id=%s", body.customer_id)
+        raise HTTPException(status_code=400, detail="Challenge mismatch")
     message = stored["challenge_bytes"]
-    if not _verify_ed25519(key_doc["public_key_b64"], message, body.signature):
+    algo = (key_doc.get("algorithm") or "ed25519").lower()
+    ok = False
+    if algo == "ed25519":
+        ok = _verify_ed25519(key_doc["public_key_b64"], message, body.signature)
+    elif algo == "rsa":
+        ok = _verify_rsa_pkcs1v15_sha256(key_doc["public_key_b64"], challenge_b64, body.signature)
+    if not ok:
         logger.warning("[device-auth] verify: signature verification failed for customer_id=%s", body.customer_id)
         raise HTTPException(status_code=401, detail="Signature verification failed")
     try:
@@ -201,7 +245,7 @@ async def transaction_challenge(body: TransactionChallengeBody):
 
 @router.post("/transaction-verify")
 async def transaction_verify(body: TransactionVerifyBody):
-    """Verify Ed25519 signature for the transaction. Marks state_id authorized; client then calls POST /api/transactions/transfer with state_id."""
+    """Verify device-auth signature for transaction. Marks state_id authorized; then call POST /api/transactions/transfer."""
     from app.routers.fido2 import get_pending_transaction
 
     logger.info(
@@ -216,11 +260,16 @@ async def transaction_verify(body: TransactionVerifyBody):
     key_doc = db.get_device_public_key(customer_id)
     if not key_doc:
         raise HTTPException(status_code=400, detail="No device key registered")
-    message = pending["challenge"]  # bytes (sha256 hash)
-    if not _verify_ed25519(key_doc["public_key_b64"], message, body.signature):
+    challenge_b64 = _b64_encode(pending["challenge"])
+    algo = (key_doc.get("algorithm") or "ed25519").lower()
+    ok = False
+    if algo == "ed25519":
+        ok = _verify_ed25519(key_doc["public_key_b64"], pending["challenge"], body.signature)
+    elif algo == "rsa":
+        ok = _verify_rsa_pkcs1v15_sha256(key_doc["public_key_b64"], challenge_b64, body.signature)
+    if not ok:
         logger.warning("[device-auth] transaction-verify: signature failed state_id=%s", body.state_id)
         raise HTTPException(status_code=401, detail="Transaction signature verification failed")
-    challenge_b64 = _b64_encode(pending["challenge"])
     try:
         db.add_device_auth_event(
             customer_id=customer_id,

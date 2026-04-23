@@ -25,6 +25,8 @@ class AccountResponse(AccountBase):
 class CustomerBase(BaseModel):
     bvn: str
     name: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
 
@@ -37,6 +39,8 @@ class CustomerResponse(BaseModel):
     id: str
     bvn: str
     name: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
     kyc_completed: bool = False
@@ -63,6 +67,47 @@ class EnsureByUsernameBody(BaseModel):
 class EnsureByUsernameResponse(BaseModel):
     customer_id: str
     created: bool
+    username: Optional[str] = None
+    name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+
+
+class AccountLookupResponse(BaseModel):
+    account_number: str
+    customer_name: str
+    account_type: str = "current"
+
+
+class RegisterBody(BaseModel):
+    """Request body for app registration (new user with existing account number)."""
+    account_number: str
+    phone: str
+    username: str
+    password: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+
+
+class RegisterResponse(BaseModel):
+    customer_id: str
+    username: str
+    account_number: str
+
+
+class LoginBody(BaseModel):
+    """Resolve session by username. Password is accepted for API compatibility but not validated (PoC)."""
+    username: str
+    password: str = ""
+
+
+class LoginResponse(BaseModel):
+    customer_id: str
+    username: str
+    name: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    accounts: list[AccountResponse]
 
 
 class KycOnboardRequest(BaseModel):

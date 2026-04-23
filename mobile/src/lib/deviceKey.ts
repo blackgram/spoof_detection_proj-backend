@@ -16,7 +16,20 @@ ed.etc.sha512Sync = (...messages: Uint8Array[]) => sha512(ed.etc.concatBytes(...
 ed.etc.sha512Async = async (...messages: Uint8Array[]) => Promise.resolve(ed.etc.sha512Sync!(...messages));
 
 const DEVICE_PRIVATE_KEY_KEY = 'accessmore_device_private_key';
+const DEVICE_HARDWARE_PUBLIC_KEY_KEY = 'accessmore_device_hardware_public_key';
 const LOG_PREFIX = '[DeviceKey]';
+const DEVICE_KEY_IMPL_ENV = process.env.EXPO_PUBLIC_DEVICE_KEY_IMPL;
+const DEVICE_KEY_IMPL = DEVICE_KEY_IMPL_ENV === 'hardware' ? 'hardware' : 'ed25519';
+const HARDWARE_UNAVAILABLE_MESSAGE =
+  'Hardware-backed device keys require a native build. Use Expo development build (not Expo Go) and ensure biometrics/device credentials are available.';
+const HARDWARE_SIGN_PROMPT = 'Authenticate to continue';
+const HARDWARE_TRANSFER_PROMPT = 'Authenticate to authorize transfer';
+
+async function getRnBiometrics() {
+  const mod = await import('react-native-biometrics');
+  const ReactNativeBiometrics = mod.default;
+  return new ReactNativeBiometrics({ allowDeviceCredentials: true });
+}
 
 /** Base64url encode (no +/ or padding) for Uint8Array. Uses btoa (available in RN/Expo). */
 function b64Encode(bytes: Uint8Array): string {
@@ -41,6 +54,9 @@ function b64Decode(str: string): Uint8Array {
  * Call this when enabling biometrics (after KYC); then register the public key with the backend.
  */
 export async function generateAndStoreKey(): Promise<{ publicKeyB64: string }> {
+  if (DEVICE_KEY_IMPL === 'hardware') {
+    return generateAndStoreHardwareKey();
+  }
   console.log(`${LOG_PREFIX} generateAndStoreKey: generating Ed25519 key pair...`);
   const secretKey = ed.utils.randomPrivateKey();
   const publicKey = await ed.getPublicKeyAsync(secretKey);
@@ -55,6 +71,9 @@ export async function generateAndStoreKey(): Promise<{ publicKeyB64: string }> {
  * Whether a device private key is stored (user has enabled device-key biometrics on this device).
  */
 export async function hasDeviceKey(): Promise<boolean> {
+  if (DEVICE_KEY_IMPL === 'hardware') {
+    return hasHardwareDeviceKey();
+  }
   const stored = await SecureStore.getItemAsync(DEVICE_PRIVATE_KEY_KEY);
   return !!stored;
 }
@@ -64,6 +83,9 @@ export async function hasDeviceKey(): Promise<boolean> {
  * Returns signature as base64. Throws if user cancels or key missing.
  */
 export async function signChallengeAfterBiometrics(challengeB64: string): Promise<string> {
+  if (DEVICE_KEY_IMPL === 'hardware') {
+    return signHardwareChallengeAfterBiometrics(challengeB64);
+  }
   console.log(`${LOG_PREFIX} signChallengeAfterBiometrics: challenge_len=${challengeB64?.length ?? 0}, loading key...`);
   const privB64 = await SecureStore.getItemAsync(DEVICE_PRIVATE_KEY_KEY);
   if (!privB64) {
@@ -89,10 +111,35 @@ export async function signChallengeAfterBiometrics(challengeB64: string): Promis
 }
 
 /**
+ * Sign a challenge (base64) without prompting biometrics (e.g. after PIN-only auth).
+ * Returns signature as base64. Throws if key missing.
+ */
+export async function signChallenge(challengeB64: string): Promise<string> {
+  if (DEVICE_KEY_IMPL === 'hardware') {
+    return signHardwareChallenge(challengeB64);
+  }
+  console.log(`${LOG_PREFIX} signChallenge: challenge_len=${challengeB64?.length ?? 0}, loading key...`);
+  const privB64 = await SecureStore.getItemAsync(DEVICE_PRIVATE_KEY_KEY);
+  if (!privB64) {
+    console.log(`${LOG_PREFIX} signChallenge: no device key in SecureStore`);
+    throw new Error('No device key registered on this device.');
+  }
+  const secretKey = b64Decode(privB64);
+  const message = b64Decode(challengeB64);
+  const signature = await ed.signAsync(message, secretKey);
+  const sigB64 = b64Encode(signature);
+  console.log(`${LOG_PREFIX} signChallenge: done. signature_len=${sigB64.length} (64 bytes)`);
+  return sigB64;
+}
+
+/**
  * Sign raw bytes (e.g. transaction challenge hash). Use after biometrics.
  * Used for transaction-verify where server sends challenge as base64 of hash.
  */
 export async function signBytesAfterBiometrics(messageBytes: Uint8Array): Promise<string> {
+  if (DEVICE_KEY_IMPL === 'hardware') {
+    return signHardwareBytesAfterBiometrics(messageBytes);
+  }
   console.log(`${LOG_PREFIX} signBytesAfterBiometrics: message_len=${messageBytes?.length ?? 0}, loading key...`);
   const privB64 = await SecureStore.getItemAsync(DEVICE_PRIVATE_KEY_KEY);
   if (!privB64) {
@@ -117,5 +164,98 @@ export async function signBytesAfterBiometrics(messageBytes: Uint8Array): Promis
  * Remove stored device key (e.g. when user disables biometrics).
  */
 export async function clearDeviceKey(): Promise<void> {
+  if (DEVICE_KEY_IMPL === 'hardware') {
+    return clearHardwareDeviceKey();
+  }
   await SecureStore.deleteItemAsync(DEVICE_PRIVATE_KEY_KEY);
+}
+
+/**
+ * Hardware-backed strategy entry points.
+ * These intentionally fail fast until a native module is wired in.
+ */
+async function generateAndStoreHardwareKey(): Promise<{ publicKeyB64: string }> {
+  console.log(`${LOG_PREFIX} generateAndStoreKey: hardware mode selected`);
+  const rnBiometrics = await getRnBiometrics();
+  const sensor = await rnBiometrics.isSensorAvailable();
+  if (!sensor.available) {
+    throw new Error(sensor.error || HARDWARE_UNAVAILABLE_MESSAGE);
+  }
+
+  const existing = await rnBiometrics.biometricKeysExist();
+  let publicKey = '';
+  if (existing.keysExist) {
+    const storedPublic = await SecureStore.getItemAsync(DEVICE_HARDWARE_PUBLIC_KEY_KEY);
+    if (!storedPublic) {
+      throw new Error('Hardware key exists but public key is missing locally. Clear and re-register device key.');
+    }
+    publicKey = storedPublic;
+    console.log(`${LOG_PREFIX} generateAndStoreKey: reusing existing hardware key`);
+  } else {
+    const created = await rnBiometrics.createKeys();
+    publicKey = created.publicKey;
+    await SecureStore.setItemAsync(DEVICE_HARDWARE_PUBLIC_KEY_KEY, publicKey);
+    console.log(`${LOG_PREFIX} generateAndStoreKey: created hardware keypair`);
+  }
+
+  return { publicKeyB64: publicKey };
+}
+
+async function hasHardwareDeviceKey(): Promise<boolean> {
+  console.log(`${LOG_PREFIX} hasDeviceKey: hardware mode selected`);
+  const rnBiometrics = await getRnBiometrics();
+  const existing = await rnBiometrics.biometricKeysExist();
+  if (!existing.keysExist) return false;
+  const storedPublic = await SecureStore.getItemAsync(DEVICE_HARDWARE_PUBLIC_KEY_KEY);
+  return !!storedPublic;
+}
+
+async function signHardwareChallengeAfterBiometrics(challengeB64: string): Promise<string> {
+  console.log(`${LOG_PREFIX} signChallengeAfterBiometrics: hardware mode selected`);
+  const rnBiometrics = await getRnBiometrics();
+  const existing = await rnBiometrics.biometricKeysExist();
+  if (!existing.keysExist) {
+    throw new Error('No hardware device key. Enable biometrics in Settings first.');
+  }
+  const signed = await rnBiometrics.createSignature({
+    promptMessage: HARDWARE_SIGN_PROMPT,
+    payload: challengeB64,
+    cancelButtonText: 'Use PIN',
+  });
+  if (!signed.success || !signed.signature) {
+    throw new Error(signed.error || 'Authentication cancelled or failed');
+  }
+  return signed.signature;
+}
+
+async function signHardwareChallenge(challengeB64: string): Promise<string> {
+  console.log(`${LOG_PREFIX} signChallenge: hardware mode selected`);
+  // Hardware keys cannot sign silently; this path prompts user auth.
+  return signHardwareChallengeAfterBiometrics(challengeB64);
+}
+
+async function signHardwareBytesAfterBiometrics(messageBytes: Uint8Array): Promise<string> {
+  console.log(`${LOG_PREFIX} signBytesAfterBiometrics: hardware mode selected`);
+  const rnBiometrics = await getRnBiometrics();
+  const existing = await rnBiometrics.biometricKeysExist();
+  if (!existing.keysExist) {
+    throw new Error('No hardware device key. Enable biometrics in Settings first.');
+  }
+  const payload = b64Encode(messageBytes);
+  const signed = await rnBiometrics.createSignature({
+    promptMessage: HARDWARE_TRANSFER_PROMPT,
+    payload,
+    cancelButtonText: 'Use PIN',
+  });
+  if (!signed.success || !signed.signature) {
+    throw new Error(signed.error || 'Authentication cancelled or failed');
+  }
+  return signed.signature;
+}
+
+async function clearHardwareDeviceKey(): Promise<void> {
+  console.log(`${LOG_PREFIX} clearDeviceKey: hardware mode selected`);
+  const rnBiometrics = await getRnBiometrics();
+  await rnBiometrics.deleteKeys();
+  await SecureStore.deleteItemAsync(DEVICE_HARDWARE_PUBLIC_KEY_KEY);
 }

@@ -43,6 +43,23 @@ Or create `.env`:
 EXPO_PUBLIC_API_URL=http://192.168.1.100:8000
 ```
 
+## iOS Push Notifications (development build)
+
+When building with `npx expo run:ios --device`, push notifications require the **Push Notifications** capability on your App ID and a provisioning profile that includes it. If you see:
+
+- `Provisioning profile "..." doesn't include the Push Notifications capability`
+- `doesn't include the aps-environment entitlement`
+
+do the following:
+
+1. Go to [Apple Developer](https://developer.apple.com) → **Certificates, Identifiers & Profiles** → **Identifiers**.
+2. Select your App ID (`com.blackgram.spoofdetectionmobile`).
+3. Under **Capabilities**, enable **Push Notifications** and save.
+4. In Xcode: **Product → Clean Build Folder**, then run again.  
+   Or in Xcode **Settings → Accounts → [Your Apple ID] → Download Manual Profiles**, then rebuild.
+
+After the App ID has Push Notifications enabled, Xcode will use (or create) a provisioning profile that includes the `aps-environment` entitlement and the build should succeed.
+
 ## Make sure backend is running
 
 1. Start the backend from the project root:

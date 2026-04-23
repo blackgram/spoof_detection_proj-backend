@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.db.firestore_client import FirestoreClient
 from app.models.customer import (
+    AccountLookupResponse,
     CustomerCreate,
     CustomerResponse,
     CustomerKycStatus,
@@ -12,6 +13,10 @@ from app.models.customer import (
     AccountResponse,
     EnsureByUsernameBody,
     EnsureByUsernameResponse,
+    RegisterBody,
+    RegisterResponse,
+    LoginBody,
+    LoginResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,6 +30,8 @@ def _customer_to_response(c: dict) -> CustomerResponse:
         id=c["id"],
         bvn=c["bvn"],
         name=c["name"],
+        first_name=c.get("first_name"),
+        last_name=c.get("last_name"),
         email=c.get("email"),
         phone=c.get("phone"),
         kyc_completed=c.get("kyc_completed", False),
@@ -44,6 +51,8 @@ async def create_customer(body: CustomerCreate):
         name=body.name,
         email=body.email,
         phone=body.phone,
+        first_name=body.first_name,
+        last_name=body.last_name,
     )
     cust = db.get_customer_by_id(customer_id)
     if not cust:
@@ -62,9 +71,112 @@ async def ensure_customer_by_username(body: EnsureByUsernameBody):
         raise HTTPException(status_code=400, detail="username is required")
     try:
         customer_id, created = db.ensure_customer_for_username(username)
-        return EnsureByUsernameResponse(customer_id=customer_id, created=created)
+        cust = db.get_customer_by_id(customer_id)
+        if not cust:
+            raise HTTPException(status_code=500, detail="Failed to load customer")
+        uname = (cust.get("username") or username).strip()
+        return EnsureByUsernameResponse(
+            customer_id=customer_id,
+            created=created,
+            username=uname,
+            name=cust.get("name") or uname,
+            first_name=cust.get("first_name"),
+            last_name=cust.get("last_name"),
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/register", response_model=RegisterResponse)
+async def register(body: RegisterBody):
+    """
+    Register a new app user with an existing account number (PoC: no validation of account).
+    Creates customer, account, and stores password hash. Returns customer_id for KYC flow.
+    """
+    username = (body.username or "").strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="username is required")
+    account_number = (body.account_number or "").strip()
+    if not account_number:
+        raise HTTPException(status_code=400, detail="account_number is required")
+    phone = (body.phone or "").strip()
+    if not phone:
+        raise HTTPException(status_code=400, detail="phone is required")
+    if not (body.password or "").strip():
+        raise HTTPException(status_code=400, detail="password is required")
+
+    existing = db.get_customer_by_username(username)
+    if existing:
+        raise HTTPException(status_code=400, detail="Username already taken")
+
+    customer_id = db.create_customer(
+        bvn="",
+        name=username,
+        email=None,
+        phone=phone,
+        username=username,
+        first_name=(body.first_name or "").strip() or None,
+        last_name=(body.last_name or "").strip() or None,
+    )
+    db.add_account(customer_id, account_number, "current", 500_000_000.0)
+    db.store_customer_password(customer_id, body.password)
+    # PoC: no KYC UI — mark verified and set a sensible daily limit for transfers (matches ibank mock UI)
+    db.set_kyc_completed(customer_id, True)
+    db.update_customer_limit(customer_id, 1_000_000.0)
+    return RegisterResponse(customer_id=customer_id, username=username, account_number=account_number)
+
+
+@router.post("/login", response_model=LoginResponse)
+async def login(body: LoginBody):
+    """
+    Resolve customer by username only (PoC: no password check on the server).
+    Returns customer id, name, and accounts. Password is ignored if sent.
+    """
+    username = (body.username or "").strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="username is required")
+    cust = db.get_customer_by_username(username)
+    if not cust:
+        raise HTTPException(status_code=404, detail="No user found with this username")
+    customer_id = cust["id"]
+    accounts_raw = db.get_accounts(customer_id)
+    accounts = [
+        AccountResponse(
+            id=a["id"],
+            customer_id=customer_id,
+            account_number=a["account_number"],
+            account_type=a.get("account_type", "current"),
+            balance_ngn=a.get("balance_ngn", 0.0),
+            status=a.get("status", "active"),
+            created_at=a.get("created_at"),
+            updated_at=a.get("updated_at"),
+        )
+        for a in accounts_raw
+    ]
+    return LoginResponse(
+        customer_id=customer_id,
+        username=username,
+        name=cust.get("name") or username,
+        first_name=cust.get("first_name"),
+        last_name=cust.get("last_name"),
+        accounts=accounts,
+    )
+
+
+@router.get("/lookup-account/{account_number}", response_model=AccountLookupResponse)
+async def lookup_account(account_number: str):
+    """Look up a beneficiary account by number. Returns the account holder name."""
+    acc = db.get_account_by_account_number(account_number)
+    if not acc:
+        raise HTTPException(status_code=404, detail="Account not found")
+    cust = db.get_customer_by_id(acc["customer_id"])
+    if not cust:
+        raise HTTPException(status_code=404, detail="Account holder not found")
+    return AccountLookupResponse(
+        account_number=acc["account_number"],
+        customer_name=cust.get("name", "Unknown"),
+        account_type=acc.get("account_type", "current"),
+    )
 
 
 @router.get("/by-bvn/{bvn}", response_model=CustomerResponse)

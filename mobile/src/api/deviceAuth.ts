@@ -6,6 +6,8 @@ import { API_BASE_URL } from '../config';
 
 const BASE = `${API_BASE_URL}/api/device-auth`;
 const LOG_PREFIX = '[DeviceAuth]';
+const DEVICE_KEY_IMPL_ENV = process.env.EXPO_PUBLIC_DEVICE_KEY_IMPL;
+const DEVICE_KEY_ALGORITHM = DEVICE_KEY_IMPL_ENV === 'hardware' ? 'rsa' : 'ed25519';
 
 async function post<T>(url: string, body: object, logLabel: string): Promise<T> {
   console.log(`${LOG_PREFIX} ${logLabel} request → ${url}`, JSON.stringify(body, null, 0).slice(0, 500));
@@ -56,9 +58,13 @@ export interface TransactionVerifyResponse {
   message?: string;
 }
 
-export async function registerDeviceKey(customerId: string, publicKeyB64: string): Promise<RegisterResponse> {
-  const body = { customer_id: customerId, public_key: publicKeyB64 };
-  console.log(`${LOG_PREFIX} register payload: customer_id=${customerId} public_key_len=${publicKeyB64?.length ?? 0}`);
+export async function registerDeviceKey(
+  customerId: string,
+  publicKeyB64: string,
+  algorithm: 'ed25519' | 'rsa' = DEVICE_KEY_ALGORITHM
+): Promise<RegisterResponse> {
+  const body = { customer_id: customerId, public_key: publicKeyB64, algorithm };
+  console.log(`${LOG_PREFIX} register payload: customer_id=${customerId} algorithm=${algorithm} public_key_len=${publicKeyB64?.length ?? 0}`);
   return post<RegisterResponse>(`${BASE}/register`, body, 'register');
 }
 

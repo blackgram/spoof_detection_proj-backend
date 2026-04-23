@@ -25,3 +25,4 @@ frontend/
 
 # Backend dev: persisted FIDO2 credentials when Firestore not used
 backend/data/
+backend/vernal-seeker-303517-73b020321a85.json

@@ -4,7 +4,7 @@
  */
 export const colors = {
   // Backgrounds – deep black
-  background: '#0a0a0a',
+  background: '#151515',
   backgroundElevated: '#111111',
   card: '#141414',
   cardBorder: '#262626',

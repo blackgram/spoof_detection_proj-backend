@@ -9,76 +9,95 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../context/AuthContext';
 import { colors, radius, spacing } from '../theme';
 
+type Nav = NativeStackNavigationProp<RootStackParamList, 'Login'>;
+
 export default function LoginScreen() {
+  const navigation = useNavigation<Nav>();
   const { login, loginWithBiometrics, getProfile, getLastUsername, isLoading, deviceChanged } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
-  const [biometricsEnabledForUsername, setBiometricsEnabledForUsername] = useState<boolean>(false);
+  const [hasStoredUser, setHasStoredUser] = useState(false);
+  const [storedUsername, setStoredUsername] = useState('');
 
   useEffect(() => {
-    getLastUsername().then((last) => {
-      if (last) setUsername(last);
-    });
-  }, [getLastUsername]);
+    (async () => {
+      const last = await getLastUsername();
+      if (last?.trim()) {
+        const profile = await getProfile(last.trim());
+        if (profile?.hasBiometrics) {
+          setStoredUsername(last.trim());
+          setUsername(last.trim());
+          setHasStoredUser(true);
+          return;
+        }
+        setUsername(last.trim());
+      }
+    })();
+  }, [getLastUsername, getProfile]);
 
-  const refreshProfileForUsername = useCallback(
-    async (name: string) => {
-      if (!name.trim()) {
-        setBiometricsEnabledForUsername(false);
+  const isBiometricMode = hasStoredUser && !password.trim();
+
+  const handleSignIn = async () => {
+    if (isBiometricMode) {
+      setAuthLoading(true);
+      try {
+        await loginWithBiometrics(storedUsername);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[Login] Biometric sign-in failed:', msg, e);
+        Alert.alert('Sign in with Biometrics', msg || 'Please try again.');
+      } finally {
+        setAuthLoading(false);
+      }
+    } else {
+      const name = username.trim();
+      if (!name) {
+        Alert.alert('Username required', 'Enter your username to sign in.');
         return;
       }
-      const profile = await getProfile(name);
-      setBiometricsEnabledForUsername(!!profile?.hasBiometrics);
-    },
-    [getProfile]
-  );
-
-  useEffect(() => {
-    refreshProfileForUsername(username);
-  }, [username, refreshProfileForUsername]);
-
-  const handlePasswordLogin = async () => {
-    const name = username.trim();
-    if (!name) {
-      Alert.alert('Username required', 'Enter your username to sign in.');
-      return;
-    }
-    if (!password) {
-      Alert.alert('Password required', 'Enter your password to sign in.');
-      return;
-    }
-    setAuthLoading(true);
-    try {
-      await login(name, password);
-    } catch (e) {
-      Alert.alert('Login failed', e instanceof Error ? e.message : 'Please try again.');
-    } finally {
-      setAuthLoading(false);
+      if (!password.trim()) {
+        Alert.alert('Password required', 'Enter your password to sign in.');
+        return;
+      }
+      setAuthLoading(true);
+      try {
+        await login(name, password);
+      } catch (e) {
+        Alert.alert('Login failed', e instanceof Error ? e.message : 'Please try again.');
+      } finally {
+        setAuthLoading(false);
+      }
     }
   };
 
-  const handleBiometricLogin = async () => {
-    const name = username.trim();
-    if (!name) {
-      Alert.alert('Username required', 'Enter your username to sign in with biometrics.');
-      return;
-    }
-    setAuthLoading(true);
-    try {
-      await loginWithBiometrics(name);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error('[Login] Biometric sign-in failed:', msg, e);
-      Alert.alert('Sign in with Biometrics', msg || 'Please try again.');
-    } finally {
-      setAuthLoading(false);
-    }
+  const handleUnlockDevice = () => {
+    Alert.alert(
+      'Unlock this device?',
+      'This will clear the saved user for biometric sign-in on this device. You will need to enter your username and password again.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unlock',
+          style: 'destructive',
+          onPress: () => {
+            setHasStoredUser(false);
+            setStoredUsername('');
+            setUsername('');
+            setPassword('');
+          },
+        },
+      ]
+    );
   };
 
   if (isLoading) {
@@ -98,12 +117,18 @@ export default function LoginScreen() {
       >
         <View style={styles.content}>
           <View style={styles.logoRow}>
-            <View style={styles.logoBox} />
-            <Text style={styles.brand}>access</Text>
-            <Text style={styles.brandDot}>more</Text>
+            <Image source={require('../../assets/Access-bank-logo.png')} style={styles.logo} />
           </View>
 
-          <Text style={styles.welcome}>Sign in to continue</Text>
+          <View style={styles.welcomeArea}>
+            {hasStoredUser ? (
+              <Text style={styles.welcome}>
+                Welcome back, <Text style={styles.welcomeName}>{storedUsername}</Text>
+              </Text>
+            ) : (
+              <Text style={styles.welcome}>Sign in to continue</Text>
+            )}
+          </View>
 
           {deviceChanged && (
             <View style={styles.deviceBanner}>
@@ -113,19 +138,22 @@ export default function LoginScreen() {
             </View>
           )}
 
+          {!hasStoredUser && (
+            <TextInput
+              style={styles.input}
+              placeholder="Username"
+              placeholderTextColor={colors.textMuted}
+              value={username}
+              onChangeText={setUsername}
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!authLoading}
+            />
+          )}
+
           <TextInput
             style={styles.input}
-            placeholder="Username"
-            placeholderTextColor={colors.textMuted}
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!authLoading}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Password (optional for biometrics)"
+            placeholder="Password"
             placeholderTextColor={colors.textMuted}
             value={password}
             onChangeText={setPassword}
@@ -137,32 +165,44 @@ export default function LoginScreen() {
           <Pressable
             style={({ pressed }) => [
               styles.primaryButton,
-              (authLoading || !password.trim()) && styles.primaryButtonDisabled,
               pressed && styles.primaryButtonPressed,
+              authLoading && styles.primaryButtonDisabled,
             ]}
-            onPress={handlePasswordLogin}
-            disabled={authLoading || !password.trim()}
+            onPress={handleSignIn}
+            disabled={authLoading}
           >
             <Text style={styles.primaryButtonText}>
-              {authLoading ? 'Signing in...' : 'SIGN IN'}
+              {authLoading
+                ? 'Signing in...'
+                : isBiometricMode
+                  ? 'SIGN IN WITH BIOMETRICS'
+                  : 'SIGN IN'}
             </Text>
           </Pressable>
 
-          <Pressable
-            style={({ pressed }) => [
-              styles.biometricButton,
-              (!username.trim() || !biometricsEnabledForUsername) && styles.primaryButtonDisabled,
-              pressed && styles.primaryButtonPressed,
-            ]}
-            onPress={handleBiometricLogin}
-            disabled={authLoading || !username.trim() || !biometricsEnabledForUsername}
-          >
-            <Text style={styles.biometricButtonText}>SIGN IN WITH BIOMETRICS</Text>
-          </Pressable>
-          {username.trim() && !biometricsEnabledForUsername && (
-            <Text style={styles.hint}>
-              Sign in with password first, then enable biometrics in the app to use this option.
-            </Text>
+          {hasStoredUser && (
+            <View style={styles.unlockRow}>
+              <Text style={styles.unlockText}>Not {storedUsername}? </Text>
+              <Pressable onPress={handleUnlockDevice}>
+                <Text style={styles.unlockLink}>Unlock device</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {!hasStoredUser && (
+            <View style={styles.linksRow}>
+              <Pressable onPress={() => navigation.navigate('DeviceChange')}>
+                <Text style={styles.linkText}>
+                  New device? <Text style={styles.linkBold}>Change here</Text>
+                </Text>
+              </Pressable>
+              <View style={styles.linkDivider} />
+              <Pressable onPress={() => navigation.navigate('Register')}>
+                <Text style={styles.linkText}>
+                  <Text style={styles.linkBold}>Register</Text>
+                </Text>
+              </Pressable>
+            </View>
           )}
 
           <Text style={styles.footer}>© Access Bank PLC. (Proof of concept)</Text>
@@ -201,6 +241,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
     gap: 12,
   },
+  logo: {
+    width: 160,
+    height: 40,
+    resizeMode: 'contain',
+  },
   logoBox: {
     width: 40,
     height: 40,
@@ -220,11 +265,18 @@ const styles = StyleSheet.create({
     color: colors.primary,
     letterSpacing: 0.5,
   },
+  welcomeArea: {
+    marginTop: 150,
+    marginBottom: spacing.md,
+  },
   welcome: {
     fontSize: 20,
     fontWeight: '600',
     color: colors.textSecondary,
-    marginBottom: spacing.lg,
+  },
+  welcomeName: {
+    color: colors.text,
+    fontWeight: '700',
   },
   deviceBanner: {
     backgroundColor: colors.primaryMuted,
@@ -252,41 +304,55 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
+    borderRadius: radius.full,
     paddingVertical: 16,
     alignItems: 'center',
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
   },
   primaryButtonPressed: {
     opacity: 0.9,
     backgroundColor: colors.primaryPressed,
   },
   primaryButtonDisabled: {
-    backgroundColor: colors.disabled,
+    opacity: 0.6,
   },
   primaryButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
+    letterSpacing: 0.5,
   },
-  biometricButton: {
-    marginTop: spacing.md,
-    paddingVertical: 16,
+  unlockRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: colors.primary,
-    borderRadius: radius.md,
+    marginTop: spacing.lg,
   },
-  biometricButtonText: {
+  unlockText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+  },
+  unlockLink: {
     color: colors.primary,
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  linksRow: {
+    alignItems: 'center',
+    marginTop: spacing.lg,
+    gap: spacing.sm,
+  },
+  linkText: {
+    color: colors.primary,
+    fontSize: 14,
+  },
+  linkBold: {
     fontWeight: '700',
   },
-  hint: {
-    marginTop: spacing.sm,
-    fontSize: 12,
-    color: colors.textMuted,
-    textAlign: 'center',
+  linkDivider: {
+    height: 1,
+    width: 24,
+    backgroundColor: colors.border,
   },
   footer: {
     marginTop: 'auto',

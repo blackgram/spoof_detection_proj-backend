@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     ios_bundle_id: str = "com.blackgram.spoofdetectionmobile"
     ios_team_id: str = ""
 
+    # Keycloak TOTP extension
+    keycloak_base_url: str = "http://localhost:8080"
+    keycloak_realm: str = "master"
+    keycloak_admin_username: str = "admin"
+    keycloak_admin_password: str = "admin"
+    keycloak_admin_client_id: str = "admin-cli"
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

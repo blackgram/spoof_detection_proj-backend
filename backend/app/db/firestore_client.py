@@ -213,6 +213,7 @@ class FirestoreClient:
             "email": email or None,
             "phone": phone or None,
             "username": (username or "").strip() or None,
+            "account_no": None,
             "kyc_completed": False,
             "reference_image_base64": None,
             "current_limit_ngn": DEFAULT_LIMIT_NGN,
@@ -258,6 +259,30 @@ class FirestoreClient:
             return existing["id"], False
         customer_id = self.create_customer(bvn="", name=key, email=None, phone=None, username=key)
         return customer_id, True
+
+    def set_customer_account_no(self, customer_id: str, account_no: str) -> bool:
+        """Store the bank account number used for AccountImageCollection lookups."""
+        account_no = (account_no or "").strip()
+        now = self._now()
+        if self._db:
+            ref = self._customer_doc(customer_id)
+            if not ref.get().exists:
+                return False
+            ref.update({"account_no": account_no, "updated_at": now})
+            return True
+        c = _memory_store["customers"].get(customer_id)
+        if not c:
+            return False
+        c["account_no"] = account_no
+        c["updated_at"] = now
+        return True
+
+    def get_customer_account_no(self, customer_id: str) -> Optional[str]:
+        """Return the stored bank account number for a customer, or None."""
+        cust = self.get_customer_by_id(customer_id)
+        if not cust:
+            return None
+        return (cust.get("account_no") or "").strip() or None
 
     def update_customer_bvn_and_name(self, customer_id: str, bvn: str, name: str) -> bool:
         """Update customer's BVN and name (e.g. when completing KYC for a username-created customer)."""

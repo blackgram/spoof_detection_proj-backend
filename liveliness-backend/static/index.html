@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Liveliness API — test</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --border: #2d3a4d;
+      --text: #e7edf4;
+      --muted: #8b9cb3;
+      --accent: #3d8bfd;
+      --ok: #3fb950;
+      --warn: #d29922;
+      --err: #f85149;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 1.5rem;
+    }
+    main { max-width: 36rem; margin: 0 auto; }
+    h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.5rem; }
+    p.sub { color: var(--muted); font-size: 0.875rem; margin: 0 0 1.5rem; }
+    label { display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 0.35rem; }
+    input[type="text"], input[type="url"] {
+      width: 100%;
+      padding: 0.6rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 1rem;
+    }
+    input[type="file"] {
+      width: 100%;
+      padding: 0.5rem 0;
+      font-size: 0.875rem;
+      color: var(--muted);
+    }
+    .field { margin-bottom: 1rem; }
+    button {
+      width: 100%;
+      margin-top: 0.5rem;
+      padding: 0.75rem 1rem;
+      border: none;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      margin-top: 0.75rem;
+    }
+    pre {
+      margin: 1rem 0 0;
+      padding: 1rem;
+      border-radius: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      font-size: 0.8rem;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .status { font-size: 0.875rem; margin-top: 1rem; }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); }
+    .status.pending { color: var(--warn); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 1.75rem 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Bank KYC verify</h1>
+    <p class="sub">POST <code>/api/kyc/verify</code> — account number + selfie image (reference from Access Bank API).</p>
+
+    <div class="field">
+      <label for="baseUrl">API base URL</label>
+      <input type="url" id="baseUrl" value="" placeholder="http://127.0.0.1:8001" autocomplete="off" />
+    </div>
+    <div class="field">
+      <label for="accountNo">Account number</label>
+      <input type="text" id="accountNo" placeholder="e.g. 0738040116" autocomplete="off" />
+    </div>
+    <div class="field">
+      <label for="selfie">Selfie image</label>
+      <input type="file" id="selfie" accept="image/*" />
+    </div>
+    <button type="button" id="btnVerify">Run verify</button>
+
+    <div class="status" id="status" aria-live="polite"></div>
+    <pre id="out" hidden></pre>
+
+    <hr />
+
+    <h1 style="font-size: 1rem">Spoof check only</h1>
+    <p class="sub">POST <code>/api/spoof-check</code> — no account number.</p>
+    <div class="field">
+      <label for="spoofFile">Image</label>
+      <input type="file" id="spoofFile" accept="image/*" />
+    </div>
+    <button type="button" id="btnSpoof" class="secondary">Run spoof-check</button>
+    <pre id="outSpoof" hidden></pre>
+  </main>
+
+  <script>
+    (function () {
+      var baseInput = document.getElementById("baseUrl");
+      var defaultOrigin = window.location.origin.replace(/\/$/, "");
+      baseInput.placeholder = defaultOrigin.indexOf("http") === 0 ? defaultOrigin : "http://127.0.0.1:8001";
+      if (!baseInput.value) baseInput.value = defaultOrigin.indexOf("http") === 0 ? defaultOrigin : "http://127.0.0.1:8001";
+
+      function base() {
+        var u = (baseInput.value || "").trim().replace(/\/$/, "");
+        return u || defaultOrigin;
+      }
+
+      function setStatus(el, text, cls) {
+        el.textContent = text;
+        el.className = "status " + (cls || "");
+      }
+
+      document.getElementById("btnVerify").addEventListener("click", async function () {
+        var account = document.getElementById("accountNo").value.trim();
+        var fileInput = document.getElementById("selfie");
+        var file = fileInput.files && fileInput.files[0];
+        var statusEl = document.getElementById("status");
+        var out = document.getElementById("out");
+
+        if (!account) {
+          setStatus(statusEl, "Enter an account number.", "err");
+          out.hidden = true;
+          return;
+        }
+        if (!file) {
+          setStatus(statusEl, "Choose an image.", "err");
+          out.hidden = true;
+          return;
+        }
+
+        var fd = new FormData();
+        fd.append("account_no", account);
+        fd.append("selfie_image", file, file.name);
+
+        setStatus(statusEl, "Requesting…", "pending");
+        out.hidden = true;
+
+        try {
+          var res = await fetch(base() + "/api/kyc/verify", { method: "POST", body: fd });
+          var text = await res.text();
+          var data;
+          try {
+            data = JSON.parse(text);
+          } catch (e) {
+            data = { raw: text };
+          }
+
+          out.textContent = JSON.stringify(data, null, 2);
+          out.hidden = false;
+          setStatus(statusEl, "HTTP " + res.status + (res.ok ? " — ok" : ""), res.ok ? "ok" : "err");
+        } catch (e) {
+          setStatus(statusEl, String(e.message || e), "err");
+          out.textContent = String(e);
+          out.hidden = false;
+        }
+      });
+
+      document.getElementById("btnSpoof").addEventListener("click", async function () {
+        var fileInput = document.getElementById("spoofFile");
+        var file = fileInput.files && fileInput.files[0];
+        var out = document.getElementById("outSpoof");
+
+        if (!file) {
+          out.textContent = "Choose an image.";
+          out.hidden = false;
+          return;
+        }
+
+        var fd = new FormData();
+        fd.append("image", file, file.name);
+
+        out.textContent = "Requesting…";
+        out.hidden = false;
+
+        try {
+          var res = await fetch(base() + "/api/spoof-check", { method: "POST", body: fd });
+          var text = await res.text();
+          var data;
+          try {
+            data = JSON.parse(text);
+          } catch (e) {
+            data = { raw: text };
+          }
+          out.textContent = JSON.stringify(data, null, 2);
+        } catch (e) {
+          out.textContent = String(e.message || e);
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

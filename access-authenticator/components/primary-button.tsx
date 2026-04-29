@@ -8,7 +8,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { useAppColors, useIsDarkMode } from '@/hooks/use-app-colors';
+import { useAppColors } from '@/hooks/use-app-colors';
 
 type PrimaryButtonProps = {
   label: string;
@@ -28,27 +28,20 @@ export function PrimaryButton({
   icon,
 }: PrimaryButtonProps) {
   const c = useAppColors();
-  const isDark = useIsDarkMode();
-
-  const filledBg = isDark ? c.orange : c.blue;
-  const filledText = '#FFFFFF';
-  const outlineBorder = isDark ? c.orange : c.blue;
-  const outlineText = isDark ? c.orange : c.blue;
 
   const buttonStyle: StyleProp<ViewStyle> = [
     styles.btn,
     variant === 'filled'
-      ? { backgroundColor: filledBg }
+      ? { backgroundColor: c.primary }
       : {
           backgroundColor: 'transparent',
-          borderWidth: 2,
-          borderColor: outlineBorder,
+          borderWidth: 1.5,
+          borderColor: c.primary,
         },
     (disabled || loading) && styles.disabled,
   ];
 
-  const textColor =
-    variant === 'filled' ? filledText : outlineText;
+  const textColor = variant === 'filled' ? '#FFFFFF' : c.primary;
 
   return (
     <Pressable
@@ -58,7 +51,7 @@ export function PrimaryButton({
       style={({ pressed }) => [buttonStyle, pressed && styles.pressed]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'filled' ? '#FFF' : outlineText} />
+        <ActivityIndicator color={variant === 'filled' ? '#FFF' : c.primary} />
       ) : (
         <>
           {icon}
@@ -72,18 +65,20 @@ export function PrimaryButton({
 const styles = StyleSheet.create({
   btn: {
     minHeight: 52,
-    borderRadius: 14,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 8,
   },
   label: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '600',
+    fontFamily: 'Inter_600SemiBold',
   },
   pressed: {
     opacity: 0.88,
+    transform: [{ scale: 0.98 }],
   },
   disabled: {
     opacity: 0.5,

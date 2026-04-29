@@ -45,8 +45,18 @@ export function generateTOTP(secretBase32: string): {
   code: string;
   remainingSeconds: number;
   period: number;
+}
+export function generateTOTP(secretBase32: string, epochSeconds: number): {
+  code: string;
+  remainingSeconds: number;
+  period: number;
+}
+export function generateTOTP(secretBase32: string, epochSeconds?: number): {
+  code: string;
+  remainingSeconds: number;
+  period: number;
 } {
-  const now = Math.floor(Date.now() / 1000);
+  const now = epochSeconds ?? Math.floor(Date.now() / 1000);
   const timeStep = Math.floor(now / PERIOD);
   const remaining = PERIOD - (now % PERIOD);
 

@@ -38,7 +38,7 @@ export function TextField({
           styles.input,
           {
             color: c.text,
-            backgroundColor: c.surface,
+            backgroundColor: c.inputBackground,
             borderColor: c.border,
           },
         ]}
@@ -48,13 +48,19 @@ export function TextField({
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 8 },
-  label: { fontSize: 14, fontWeight: '500' },
+  wrap: { gap: 6 },
+  label: {
+    fontSize: 13,
+    fontWeight: '500',
+    fontFamily: 'Inter_500Medium',
+    letterSpacing: 0.1,
+  },
   input: {
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    fontSize: 16,
+    fontSize: 15,
+    fontFamily: 'Inter_400Regular',
   },
 });

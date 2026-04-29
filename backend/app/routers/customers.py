@@ -24,6 +24,13 @@ router = APIRouter(prefix="/api/customers", tags=["customers"])
 db = FirestoreClient()
 
 
+def _mask_account_no(account_no: str) -> str:
+    s = (account_no or "").strip()
+    if len(s) <= 4:
+        return "****"
+    return f"{'*' * (len(s) - 4)}{s[-4:]}"
+
+
 def _customer_to_response(c: dict) -> CustomerResponse:
     """Strip internal fields for response."""
     return CustomerResponse(
@@ -105,6 +112,13 @@ async def register(body: RegisterBody):
     if not (body.password or "").strip():
         raise HTTPException(status_code=400, detail="password is required")
 
+    logger.info(
+        "Registration request username=%s account_no=%s phone_len=%d",
+        username,
+        _mask_account_no(account_number),
+        len(phone),
+    )
+
     existing = db.get_customer_by_username(username)
     if existing:
         raise HTTPException(status_code=400, detail="Username already taken")
@@ -120,9 +134,17 @@ async def register(body: RegisterBody):
     )
     db.add_account(customer_id, account_number, "current", 500_000_000.0)
     db.store_customer_password(customer_id, body.password)
-    # PoC: no KYC UI — mark verified and set a sensible daily limit for transfers (matches ibank mock UI)
-    db.set_kyc_completed(customer_id, True)
+    # Store the account number so liveness/verify can call AccountImageCollection API
+    db.set_customer_account_no(customer_id, account_number)
+    # KYC flag left False — the liveness challenge completes it
     db.update_customer_limit(customer_id, 1_000_000.0)
+    logger.info(
+        "Registration created customer_id=%s username=%s account_no=%s kyc_completed=%s",
+        customer_id,
+        username,
+        _mask_account_no(account_number),
+        False,
+    )
     return RegisterResponse(customer_id=customer_id, username=username, account_number=account_number)
 
 

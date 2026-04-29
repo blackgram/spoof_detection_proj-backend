@@ -1,0 +1,3 @@
+# Vendored Silent-Face — run scripts/vendor-silent-face.sh or use a submodule.
+# Keep tracked only if your team deliberately commits pinned upstream snapshots.
+Silent-Face-Anti-Spoofing/

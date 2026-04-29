@@ -2,8 +2,9 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { BiometricGate } from '@/components/biometric-gate';
 import { useAuth } from '@/context/AuthContext';
-import { useAppColors, useIsDarkMode } from '@/hooks/use-app-colors';
+import { useAppColors } from '@/hooks/use-app-colors';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   getPendingAuthRequests,
@@ -29,9 +30,8 @@ function timeAgo(iso: string): string {
 }
 
 export default function LogsScreen() {
-  const { totpAccount, isTokenSetup } = useAuth();
+  const { totpAccount, isTokenSetup, isBiometricLocked } = useAuth();
   const c = useAppColors();
-  const isDark = useIsDarkMode();
 
   const [requests, setRequests] = useState<AuthRequestItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -62,6 +62,10 @@ export default function LogsScreen() {
       setResponding(null);
     }
   };
+
+  if (isTokenSetup && isBiometricLocked) {
+    return <BiometricGate title="Access Token" />;
+  }
 
   if (!isTokenSetup) {
     return (

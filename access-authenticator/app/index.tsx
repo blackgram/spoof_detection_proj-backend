@@ -1,12 +1,14 @@
 import { Redirect } from 'expo-router';
-
-import { useAuth } from '@/context/AuthContext';
+import { usePreferences } from '@/context/PreferencesContext';
 
 export default function Index() {
-  const { user } = useAuth();
+  const { loaded, hasOnboarded } = usePreferences();
 
-  if (user) {
-    return <Redirect href="/(tabs)" />;
+  if (!loaded) return null;
+
+  if (!hasOnboarded) {
+    return <Redirect href="/welcome" />;
   }
-  return <Redirect href="/(auth)/login" />;
+
+  return <Redirect href="/(tabs)" />;
 }

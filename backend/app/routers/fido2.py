@@ -8,13 +8,15 @@ FIDO2 / Passkey authentication and transaction authorization.
 KYC flow remains for limits and device registration; this flow is for auth and transaction authorization.
 """
 
+from __future__ import annotations
+
 import base64
 import hashlib
 import logging
 import os
 import secrets
 import uuid
-from typing import Any
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException
 
@@ -38,7 +40,7 @@ _auth_state: dict[str, Any] = {}
 _transaction_state: dict[str, dict[str, Any]] = {}
 
 
-def consume_authorized_transaction(state_id: str) -> dict[str, Any] | None:
+def consume_authorized_transaction(state_id: str) -> Optional[Dict[str, Any]]:
     """
     If state_id exists and is authorized, return the pending transaction dict and remove it.
     Used by POST /api/transactions/transfer when client sends state_id (FIDO2 or device-auth flow).
@@ -63,7 +65,7 @@ def set_transaction_authorized(state_id: str) -> None:
         _transaction_state[state_id]["authorized"] = True
 
 
-def get_pending_transaction(state_id: str) -> dict[str, Any] | None:
+def get_pending_transaction(state_id: str) -> Optional[Dict[str, Any]]:
     """Return pending transaction dict for state_id, or None (used by device-auth)."""
     return _transaction_state.get(state_id)
 
@@ -122,7 +124,7 @@ def _webauthn_options_to_client(
     options: Any,
     *,
     omit_allow_credentials: bool = False,
-    credential_id_client_map: dict[str, str] | None = None,
+    credential_id_client_map: Optional[Dict[str, str]] = None,
 ) -> dict[str, Any]:
     """Convert server options to JSON-friendly dict with base64url binary fields.
     python-fido2 returns CredentialCreationOptions/CredentialRequestOptions with a nested 'publicKey' dict.

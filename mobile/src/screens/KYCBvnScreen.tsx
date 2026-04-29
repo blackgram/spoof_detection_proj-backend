@@ -23,7 +23,19 @@ export default function KYCBvnScreen() {
   const { reason, customerId, username } = params;
 
   useEffect(() => {
+    console.log('[KYCBvnScreen] route params', { reason, customerId, username });
     const timer = setTimeout(() => {
+      if (reason === 'registration') {
+        console.log('[KYCBvnScreen] routing to KYCLivenessMulti', { reason, customerId, username });
+        navigation.replace('KYCLivenessMulti', {
+          reason,
+          ...(customerId ? { customerId } : {}),
+          ...(username ? { username } : {}),
+        });
+        return;
+      }
+
+      console.log('[KYCBvnScreen] routing to KYCCapture', { reason, customerId, username });
       navigation.replace('KYCCapture', {
         mode: 'onboarding',
         reason,

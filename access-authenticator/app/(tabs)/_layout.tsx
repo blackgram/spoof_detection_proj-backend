@@ -3,22 +3,28 @@ import { Tabs } from 'expo-router';
 import { useTheme } from '@react-navigation/native';
 
 import { useIsDarkMode } from '@/hooks/use-app-colors';
+import { palette } from '@/constants/theme';
 
 export default function TabLayout() {
   const theme = useTheme();
   const isDark = useIsDarkMode();
 
+  const activeTint = isDark ? palette.dark.primary : palette.light.primary;
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        headerTintColor: theme.colors.text,
-        headerShadowVisible: false,
-        tabBarActiveTintColor: "#EA580C",
-        tabBarInactiveTintColor: isDark ? '#64748B' : '#94A3B8',
+        tabBarActiveTintColor: activeTint,
+        tabBarInactiveTintColor: isDark ? '#505060' : '#9090A0',
         tabBarStyle: {
           backgroundColor: theme.colors.card,
           borderTopColor: theme.colors.border,
+          borderTopWidth: 1,
+        },
+        tabBarLabelStyle: {
+          fontFamily: 'Inter_500Medium',
+          fontSize: 11,
         },
       }}
     >
@@ -32,15 +38,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="token"
-        options={{
-          title: 'Token',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="lock-closed" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="logs"
         options={{
           title: 'Authorizations',
@@ -50,11 +47,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="settings"
         options={{
-          title: 'Profile',
+          title: 'Settings',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-circle" size={size} color={color} />
+            <Ionicons name="settings-outline" size={size} color={color} />
           ),
         }}
       />

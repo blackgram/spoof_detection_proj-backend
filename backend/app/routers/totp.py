@@ -4,7 +4,11 @@ Authenticates as Keycloak admin, ensures a Keycloak user exists for the customer
 registers TOTP via the Keycloak TOTP-registration extension, and returns the secret.
 """
 
+from __future__ import annotations
+
 import logging
+from typing import Optional
+
 import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -33,7 +37,7 @@ class TotpSetupResponse(BaseModel):
 
 
 class TotpVerifyRequest(BaseModel):
-    customer_id: str | None = None
+    customer_id: Optional[str] = None
     username: str
     totp_code: str
 

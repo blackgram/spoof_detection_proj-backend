@@ -1,0 +1,24 @@
+# Compose loads `.env` from this folder.
+#
+# If `api.dev.accessbankplc.com` only resolves via corporate DNS (private IP),
+# public DNS inside Docker (was 8.8.8.8) CANNOT resolve it → [Errno -2].
+#
+# Match the nameserver shown by:  nslookup api.dev.accessbankplc.com   (first "Server:" line)
+# Optionally set DOCKER_DNS_SERVER in .env; default matches a typical corp resolver slot.
+#
+#   export ACCESS_BANK_EFM_AUTH_TOKEN=...
+#   docker compose up --build
+
+services:
+  api:
+    build: .
+    ports:
+      - "8001:8001"
+    environment:
+      ACCESS_BANK_EFM_AUTH_TOKEN: ${ACCESS_BANK_EFM_AUTH_TOKEN:-}
+    dns:
+      - ${DOCKER_DNS_SERVER:-10.1.9.11}
+    # If corp DNS STILL fails in the container, pin hostname → IP from `nslookup` "Address:"
+    # (only works while this IP stays valid behind VPN/DNS policies):
+    # extra_hosts:
+    #   - "api.dev.accessbankplc.com:10.111.29.226"

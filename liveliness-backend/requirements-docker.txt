@@ -1,0 +1,24 @@
+# Same as requirements.txt except torch/torchvision — those are installed in the
+# Dockerfile from PyTorch's CPU wheel index to avoid NVIDIA/CUDA blobs (smaller layers,
+# fewer I/O failures on Docker Desktop). For GPU images, override the Dockerfile install step.
+
+# FastAPI and server
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+
+# Face recognition (DeepFace)
+deepface>=0.0.89
+tf-keras>=2.16.0
+
+# Image processing
+Pillow>=10.3.0
+opencv-python-headless>=4.9.0
+numpy>=1.26.0
+
+httpx>=0.26.0
+
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+easydict>=1.9

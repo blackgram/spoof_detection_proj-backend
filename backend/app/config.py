@@ -1,9 +1,11 @@
 """App configuration from environment."""
 
 import os
-from pathlib import Path
-from pydantic_settings import BaseSettings
 from functools import lru_cache
+from pathlib import Path
+from typing import Optional
+
+from pydantic_settings import BaseSettings
 
 # Backend root = directory containing app/ (where .env lives)
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
@@ -39,8 +41,8 @@ def _ensure_env_loaded() -> None:
 class Settings(BaseSettings):
     """Application settings. Use env vars or .env file."""
 
-    firestore_project_id: str | None = None
-    google_application_credentials: str | None = None
+    firestore_project_id: Optional[str] = None
+    google_application_credentials: Optional[str] = None
 
     # FIDO2 / Passkey relying party (e.g. "localhost" for dev, "yourapp.com" for prod)
     fido2_rp_id: str = "localhost"

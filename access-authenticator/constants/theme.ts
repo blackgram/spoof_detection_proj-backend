@@ -4,30 +4,42 @@ import {
   type Theme,
 } from '@react-navigation/native';
 
-/** Brand palette (`Colors` alias kept for `use-theme-color` template hook) */
+/** Brand palette matching the Access Authenticator UX Design */
 export const Colors = {
   light: {
     background: '#FFFFFF',
-    surface: '#F8FAFC',
-    text: '#0F172A',
-    textMuted: '#64748B',
-    border: '#E2E8F0',
-    blue: '#1D4ED8',
-    blueMuted: '#3B82F6',
-    orange: '#EA580C',
-    orangeLight: '#F97316',
-    error: '#DC2626',
+    surface: '#FFFFFF',
+    text: '#0A0A0F',
+    textMuted: '#717182',
+    border: 'rgba(0,0,0,0.10)',
+    primary: '#003883',
+    orange: '#FF8200',
+    orangeLight: '#FFF3E0',
+    accent: '#E8F0FE',
+    accentForeground: '#003883',
+    muted: '#ececf0',
+    inputBackground: '#f3f3f5',
+    error: '#d4183d',
+    // kept for backwards compat in any screen that still refs c.blue
+    blue: '#003883',
+    blueMuted: '#003883',
   },
   dark: {
-    background: '#000000',
-    surface: '#0A0A0A',
-    text: '#F8FAFC',
-    textMuted: '#94A3B8',
-    border: '#1E293B',
-    orange: '#FB923C',
-    orangeDeep: '#EA580C',
-    blue: '#60A5FA',
-    error: '#F87171',
+    background: '#0A0A0F',
+    surface: '#18181f',
+    text: '#F5F5FA',
+    textMuted: '#9090A0',
+    border: 'rgba(255,255,255,0.10)',
+    primary: '#FF8200',
+    orange: '#FF8200',
+    orangeLight: '#2A1800',
+    accent: '#1a2540',
+    accentForeground: '#93b4ff',
+    muted: '#1e1e2a',
+    inputBackground: '#1e1e2a',
+    error: '#f04060',
+    blue: '#93b4ff',
+    blueMuted: '#93b4ff',
   },
 } as const;
 
@@ -39,12 +51,12 @@ export function navigationTheme(colorScheme: 'light' | 'dark'): Theme {
       ...NavDarkTheme,
       colors: {
         ...NavDarkTheme.colors,
-        primary: palette.dark.orange,
+        primary: palette.dark.primary,
         background: palette.dark.background,
         card: palette.dark.surface,
         text: palette.dark.text,
         border: palette.dark.border,
-        notification: palette.dark.orangeDeep,
+        notification: palette.dark.orange,
       },
     };
   }
@@ -52,7 +64,7 @@ export function navigationTheme(colorScheme: 'light' | 'dark'): Theme {
     ...NavDefaultTheme,
     colors: {
       ...NavDefaultTheme.colors,
-      primary: palette.light.blue,
+      primary: palette.light.primary,
       background: palette.light.background,
       card: palette.light.surface,
       text: palette.light.text,

@@ -21,6 +21,51 @@ export interface VerificationResult {
   message: string;
 }
 
+/**
+ * Flow B: in-house multi-capture liveness.
+ * Prompts are server-issued to prevent replay of pre-recorded video.
+ */
+export type LivenessPrompt =
+  | 'look_straight'
+  | 'turn_left'
+  | 'turn_right'
+  | 'smile'
+  | 'blink'
+  | 'nod';
+
+export interface LivenessStartResponse {
+  session_id: string;
+  customer_id: string;
+  prompts: LivenessPrompt[];
+  expires_at: string;
+  max_retries: number;
+}
+
+export interface PerFrameScore {
+  prompt: LivenessPrompt;
+  is_real: boolean;
+  confidence: number;
+  reason?: string | null;
+}
+
+export interface ReplaySignals {
+  phash_distances: number[];
+  brightness_stddev_spread: number;
+  is_suspicious_identical: boolean;
+  is_suspicious_scene_change: boolean;
+  is_suspicious_uniform_brightness: boolean;
+  notes: string[];
+}
+
+export interface MultiCaptureVerificationResult
+  extends Omit<VerificationResult, 'overall_result'> {
+  overall_result: 'pass' | 'fail' | 'spoof_detected' | 'step_up' | 'retry';
+  session_id: string;
+  per_frame_scores: PerFrameScore[];
+  replay_signals: ReplaySignals;
+  risk_flags: string[];
+}
+
 /** GET /api/customers/{customer_id}/kyc-status */
 export async function getKycStatus(customerId: string): Promise<KycStatus> {
   const controller = new AbortController();
@@ -105,6 +150,113 @@ export async function kycOnboard(params: {
  * Form: customer_id, selfie_image (file)
  * Returns VerificationResult.
  */
+/**
+ * POST /api/kyc/liveness/start
+ * Form: customer_id
+ * Returns a short-lived session with randomised prompts.
+ */
+export async function kycLivenessStart(customerId: string): Promise<LivenessStartResponse> {
+  console.log('[kycLivenessStart] request', { customerId });
+  const formData = new FormData();
+  formData.append('customer_id', customerId);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), KYC_REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}/api/kyc/liveness/start`, {
+      method: 'POST',
+      body: formData,
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to start liveness session' }));
+    console.log('[kycLivenessStart] failed', { customerId, status: res.status, detail: err.detail });
+    throw new Error(err.detail || `Status ${res.status}`);
+  }
+  const data = await res.json();
+  console.log('[kycLivenessStart] success', {
+    customerId,
+    session_id: data.session_id,
+    prompts: data.prompts,
+    expires_at: data.expires_at,
+  });
+  return data;
+}
+
+/**
+ * POST /api/kyc/liveness/verify
+ * Multipart with one frame per server-issued prompt (up to 5) + ordered
+ * capture timestamps + session_id. Server is authoritative.
+ */
+export async function kycLivenessVerify(params: {
+  customerId: string;
+  sessionId: string;
+  frames: { uri: string; capturedAtMs: number }[];
+}): Promise<MultiCaptureVerificationResult> {
+  console.log('[kycLivenessVerify] request', {
+    customerId: params.customerId,
+    sessionId: params.sessionId,
+    frames: params.frames.length,
+  });
+  if (params.frames.length < 2) {
+    throw new Error('At least two frames are required.');
+  }
+  if (params.frames.length > 5) {
+    throw new Error('At most five frames are supported.');
+  }
+
+  const formData = new FormData();
+  formData.append('customer_id', params.customerId);
+  formData.append('session_id', params.sessionId);
+  formData.append(
+    'timestamps',
+    JSON.stringify(params.frames.map((f) => f.capturedAtMs))
+  );
+  params.frames.forEach((f, i) => {
+    formData.append(`frame_${i}`, {
+      uri: f.uri,
+      name: `frame_${i}.jpg`,
+      type: 'image/jpeg',
+    } as any);
+  });
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), KYC_REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}/api/kyc/liveness/verify`, {
+      method: 'POST',
+      body: formData,
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Liveness verification failed' }));
+    console.log('[kycLivenessVerify] failed', {
+      customerId: params.customerId,
+      sessionId: params.sessionId,
+      status: res.status,
+      detail: err.detail,
+    });
+    throw new Error(err.detail || `Status ${res.status}`);
+  }
+  const data = await res.json();
+  console.log('[kycLivenessVerify] success', {
+    sessionId: data.session_id,
+    overall_result: data.overall_result,
+    risk_flags: data.risk_flags,
+  });
+  return data;
+}
+
 export async function kycVerify(customerId: string, selfieImageUri: string): Promise<VerificationResult> {
   const formData = new FormData();
   formData.append('customer_id', customerId);

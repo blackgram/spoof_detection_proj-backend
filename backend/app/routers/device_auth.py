@@ -5,13 +5,14 @@ Device-bound key + local biometrics (no passkeys).
 - Transaction: same state_id flow as FIDO2; transfer endpoint consumes state_id.
 """
 
+from __future__ import annotations
+
 import base64
 import hashlib
 import logging
 import secrets
 import uuid
-from typing import Literal
-from typing import Any
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -103,7 +104,7 @@ class VerifyBody(BaseModel):
     customer_id: str
     challenge: str  # base64 challenge from /challenge
     signature: str  # base64 Ed25519 signature (64 bytes)
-    device_name: str | None = None  # e.g. "iPhone 17 Pro Max"
+    device_name: Optional[str] = None  # e.g. "iPhone 17 Pro Max"
 
 
 class TransactionChallengeBody(BaseModel):
@@ -115,7 +116,7 @@ class TransactionChallengeBody(BaseModel):
 class TransactionVerifyBody(BaseModel):
     state_id: str
     signature: str  # base64 Ed25519 signature of the transaction challenge (hash) the client received
-    device_name: str | None = None  # e.g. "iPhone 17 Pro Max"
+    device_name: Optional[str] = None  # e.g. "iPhone 17 Pro Max"
 
 
 # --- Endpoints ---

@@ -77,6 +77,11 @@ export default function RegisterScreen() {
     }
     setLoading(true);
     try {
+      console.log('[RegisterScreen] submitting registration', {
+        username: user,
+        account_no_last4: acc.slice(-4),
+        has_phone: Boolean(ph),
+      });
       const data = await registerCustomer({
         account_number: acc,
         phone: ph,
@@ -90,7 +95,13 @@ export default function RegisterScreen() {
         customerId: data.customer_id,
         username: data.username,
       });
+      console.log('[RegisterScreen] navigate KYCBvn', {
+        reason: 'registration',
+        customerId: data.customer_id,
+        username: data.username,
+      });
     } catch (e) {
+      console.log('[RegisterScreen] registration failed', e);
       Alert.alert('Registration failed', e instanceof Error ? e.message : 'Please try again.');
     } finally {
       setLoading(false);

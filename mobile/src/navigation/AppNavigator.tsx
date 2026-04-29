@@ -15,6 +15,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 import LimitScreen from '../screens/LimitScreen';
 import KYCBvnScreen from '../screens/KYCBvnScreen';
 import KYCCaptureScreen from '../screens/KYCCaptureScreen';
+import KYCLivenessMultiScreen from '../screens/KYCLivenessMultiScreen';
 import TokenScreen from '../screens/TokenScreen';
 import SupportScreen from '../screens/SupportScreen';
 import ScanScreen from '../screens/ScanScreen';
@@ -69,6 +70,13 @@ export type RootStackParamList = {
     customerId?: string;
     registrationUsername?: string;
   };
+  KYCLivenessMulti: {
+    reason: KycReason;
+    pendingLimitNg?: number;
+    pendingTransfer?: { amount_ngn: number; beneficiary_account_number: string };
+    customerId?: string;
+    username?: string;
+  };
   MainTabs: undefined;
   Token: undefined;
   Support: undefined;
@@ -105,6 +113,7 @@ function LoginStack() {
       />
       <Stack.Screen name="KYCBvn" component={KYCBvnScreen} />
       <Stack.Screen name="KYCCapture" component={KYCCaptureScreen} />
+      <Stack.Screen name="KYCLivenessMulti" component={KYCLivenessMultiScreen} />
     </Stack.Navigator>
   );
 }
@@ -200,6 +209,11 @@ function HomeStack() {
         component={KYCCaptureScreen}
         options={{ headerShown: false }}
       />
+      <Stack.Screen
+        name="KYCLivenessMulti"
+        component={KYCLivenessMultiScreen}
+        options={{ headerShown: false }}
+      />
     </Stack.Navigator>
   );
 }
@@ -265,6 +279,11 @@ function SettingsStack() {
       <Stack.Screen
         name="KYCCapture"
         component={KYCCaptureScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="KYCLivenessMulti"
+        component={KYCLivenessMultiScreen}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>

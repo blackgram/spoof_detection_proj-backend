@@ -1,4 +1,4 @@
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -10,6 +10,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import Svg, { Circle } from 'react-native-svg';
 import { generateTOTP, PERIOD } from '@/lib/totp';
+import { useTranslation } from '@/lib/i18n';
 
 const SVG_SIZE = 96;
 const SVG_RADIUS = 42;
@@ -21,6 +22,7 @@ export default function TokenScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { totpAccounts, isTokenSetup, isBiometricLocked, getTokenById, removeToken } = useAuth();
+  const { t } = useTranslation();
   const token = id ? getTokenById(id) : totpAccounts[0] ?? null;
 
   const [code, setCode] = useState('');
@@ -54,7 +56,7 @@ export default function TokenScreen() {
   };
 
   if (isTokenSetup && isBiometricLocked) {
-    return <BiometricGate title="Access Token" />;
+    return <BiometricGate title={t('biometric.title')} />;
   }
 
   /* ── Empty state ─────────────────────────────────────── */
@@ -62,15 +64,15 @@ export default function TokenScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={['top']}>
         <View style={[styles.navBar, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
-          <Text style={[styles.navTitle, { color: c.text }]}>Token</Text>
+          <Text style={[styles.navTitle, { color: c.text }]}>{t('token.title')}</Text>
         </View>
         <View style={styles.emptyContainer}>
           <View style={[styles.shieldBadge, { backgroundColor: c.accent }]}>
             <Ionicons name="shield-outline" size={40} color={c.primary} />
           </View>
-          <Text style={[styles.emptyTitle, { color: c.text }]}>No token configured</Text>
+          <Text style={[styles.emptyTitle, { color: c.text }]}>{t('token.empty.title')}</Text>
           <Text style={[styles.emptySubtitle, { color: c.textMuted }]}>
-            Scan a QR code from your banking channel to set up your authenticator token.
+            {t('token.empty.subtitle')}
           </Text>
         </View>
         <View style={[styles.bottomBar, { backgroundColor: c.surface, borderTopColor: c.border }]}>
@@ -80,7 +82,7 @@ export default function TokenScreen() {
             activeOpacity={0.88}
           >
             <Ionicons name="add-outline" size={18} color="#fff" />
-            <Text style={styles.primaryBtnText}>Add token</Text>
+            <Text style={styles.primaryBtnText}>{t('addToken.title')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -99,16 +101,16 @@ export default function TokenScreen() {
           >
             <Ionicons name="arrow-back" size={20} color={c.textMuted} />
           </TouchableOpacity>
-          <Text style={[styles.navTitle, { color: c.text }]}>Delete token</Text>
+          <Text style={[styles.navTitle, { color: c.text }]}>{t('token.deleteConfirm.heading')}</Text>
         </View>
 
         <View style={styles.deleteCenter}>
           <View style={[styles.deleteBadge, { backgroundColor: isDark ? '#2a0a12' : '#fff0f3' }]}>
             <Ionicons name="trash-outline" size={32} color={c.error} />
           </View>
-          <Text style={[styles.deleteTitle, { color: c.text }]}>Delete this token?</Text>
+          <Text style={[styles.deleteTitle, { color: c.text }]}>{t('token.deleteConfirm.title')}</Text>
           <Text style={[styles.deleteSubtitle, { color: c.textMuted }]}>
-            This action cannot be undone
+            {t('token.deleteConfirm.subtitle')}
           </Text>
           <Text style={[styles.deleteTokenName, { color: c.text }]}>
             {token!.issuer} ({token!.label})
@@ -121,14 +123,14 @@ export default function TokenScreen() {
             onPress={() => removeToken(token!.id)}
             activeOpacity={0.88}
           >
-            <Text style={styles.primaryBtnText}>Delete</Text>
+            <Text style={styles.primaryBtnText}>{t('common.delete')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.outlineBtn, { borderColor: c.border, backgroundColor: isDark ? c.surface : '#fff' }]}
             onPress={() => setShowDeleteConfirm(false)}
             activeOpacity={0.88}
           >
-            <Text style={[styles.outlineBtnText, { color: c.text }]}>Cancel</Text>
+            <Text style={[styles.outlineBtnText, { color: c.text }]}>{t('common.cancel')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -146,7 +148,7 @@ export default function TokenScreen() {
         >
           <Ionicons name="arrow-back" size={20} color={c.textMuted} />
         </TouchableOpacity>
-        <Text style={[styles.navTitle, { color: c.text }]}>Token details</Text>
+        <Text style={[styles.navTitle, { color: c.text }]}>{t('token.details')}</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -201,7 +203,7 @@ export default function TokenScreen() {
               </Text>
             </View>
             <Text style={[styles.timerLabel, { color: isExpiring ? c.orange : c.textMuted }]}>
-              SECONDS
+              {t('token.seconds')}
             </Text>
           </View>
 
@@ -212,30 +214,30 @@ export default function TokenScreen() {
             activeOpacity={0.88}
           >
             <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={16} color="#fff" />
-            <Text style={styles.copyFullBtnText}>{copied ? 'Copied' : 'Copy code'}</Text>
+            <Text style={styles.copyFullBtnText}>{copied ? t('token.copied') : t('token.copyCode')}</Text>
           </TouchableOpacity>
         </View>
 
         {/* Info card */}
         <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border, marginTop: 0 }]}>
           <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: c.textMuted }]}>ACCOUNT</Text>
+            <Text style={[styles.infoLabel, { color: c.textMuted }]}>{t('token.account')}</Text>
             <Text style={[styles.infoValue, { color: c.text }]}>{token!.label}</Text>
           </View>
           <View style={[styles.divider, { backgroundColor: c.border }]} />
           <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: c.textMuted }]}>ISSUER</Text>
+            <Text style={[styles.infoLabel, { color: c.textMuted }]}>{t('token.issuer')}</Text>
             <Text style={[styles.infoValue, { color: c.text }]}>{token!.issuer}</Text>
           </View>
           <View style={[styles.divider, { backgroundColor: c.border }]} />
           <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: c.textMuted }]}>ALGORITHM</Text>
-            <Text style={[styles.infoValue, { color: c.text }]}>SHA-1 (HMAC)</Text>
+            <Text style={[styles.infoLabel, { color: c.textMuted }]}>{t('token.algorithm')}</Text>
+            <Text style={[styles.infoValue, { color: c.text }]}>{t('token.algorithmValue')}</Text>
           </View>
           <View style={[styles.divider, { backgroundColor: c.border }]} />
           <View style={styles.infoRow}>
-            <Text style={[styles.infoLabel, { color: c.textMuted }]}>PERIOD</Text>
-            <Text style={[styles.infoValue, { color: c.text }]}>30 seconds</Text>
+            <Text style={[styles.infoLabel, { color: c.textMuted }]}>{t('token.period')}</Text>
+            <Text style={[styles.infoValue, { color: c.text }]}>{t('token.periodValue')}</Text>
           </View>
         </View>
 
@@ -246,7 +248,7 @@ export default function TokenScreen() {
           activeOpacity={0.88}
         >
           <Ionicons name="trash-outline" size={16} color={c.error} />
-          <Text style={[styles.deleteBtnText, { color: c.error }]}>Delete token</Text>
+          <Text style={[styles.deleteBtnText, { color: c.error }]}>{t('token.delete')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -460,6 +462,7 @@ const styles = StyleSheet.create({
   /* Bottom action bar */
   bottomBar: {
     padding: 16,
+    paddingBottom: Platform.OS === 'android' ? 24 : 16,
     borderTopWidth: 1,
     gap: 8,
   },

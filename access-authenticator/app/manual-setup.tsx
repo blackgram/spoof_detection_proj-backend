@@ -20,6 +20,7 @@ import { activateTotp } from '@/api/totpActivation';
 import { useAppColors, useIsDarkMode } from '@/hooks/use-app-colors';
 import { useAuth } from '@/context/AuthContext';
 import type { ChannelCode } from '@/api/totpActivation';
+import { useTranslation } from '@/lib/i18n';
 
 const CHANNELS: { code: ChannelCode; name: string }[] = [
   { code: 'IBANK', name: 'Access Bank' },
@@ -133,6 +134,7 @@ export default function ManualSetupScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ code?: string }>();
   const { setupToken } = useAuth();
+  const { t } = useTranslation();
 
   const [activationCode, setActivationCode] = useState('');
   const [channelUsername, setChannelUsername] = useState('');
@@ -180,7 +182,7 @@ export default function ManualSetupScreen() {
       setShowErrorModal(false);
       router.replace('/(tabs)');
     } catch (e: any) {
-      setErrorMessage(e?.message || 'Could not activate token.');
+      setErrorMessage(e?.message || t('manualSetup.failedDefault'));
       setShowErrorModal(true);
     } finally {
       setLoading(false);
@@ -193,7 +195,7 @@ export default function ManualSetupScreen() {
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn} activeOpacity={0.75}>
           <Ionicons name="arrow-back" size={20} color={c.textMuted} />
         </TouchableOpacity>
-        <Text style={[s.headerTitle, { color: c.text }]}>Enter details</Text>
+        <Text style={[s.headerTitle, { color: c.text }]}>{t('manualSetup.title')}</Text>
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -203,23 +205,23 @@ export default function ManualSetupScreen() {
           showsVerticalScrollIndicator={false}
         >
           <FloatingInput
-            label="Activation code"
+            label={t('manualSetup.activationCode')}
             value={activationCode}
             onChangeText={setActivationCode}
-            placeholder="XXXX-XXXX-XXXX"
+            placeholder={t('manualSetup.activationPlaceholder')}
             autoCapitalize="characters"
             isCode
           />
 
           <FloatingInput
-            label="Username"
+            label={t('manualSetup.username')}
             value={channelUsername}
             onChangeText={setChannelUsername}
-            placeholder="Enter your username"
+            placeholder={t('manualSetup.usernamePlaceholder')}
           />
 
           <View style={s.section}>
-            <Text style={[s.sectionLabel, { color: c.textMuted }]}>Channel</Text>
+            <Text style={[s.sectionLabel, { color: c.textMuted }]}>{t('manualSetup.channel')}</Text>
             <TouchableOpacity
               onPress={() => setShowChannelPicker(true)}
               style={[s.channelBtn, { backgroundColor: c.inputBackground, borderColor: c.border }]}
@@ -229,7 +231,7 @@ export default function ManualSetupScreen() {
                 <Ionicons name="business-outline" size={18} color={c.primary} />
               </View>
               <Text style={[s.channelBtnText, { color: selectedChannel ? c.text : c.textMuted }]}> 
-                {selectedChannel?.name ?? 'Select channel'}
+                {selectedChannel?.name ?? t('manualSetup.selectChannel')}
               </Text>
               <Ionicons name="chevron-down" size={18} color={c.textMuted} />
             </TouchableOpacity>
@@ -237,8 +239,8 @@ export default function ManualSetupScreen() {
 
           <View style={[s.note, { backgroundColor: isDark ? '#1a1a28' : '#F5F5F8' }]}> 
             <Text style={[s.noteText, { color: c.textMuted }]}>
-              <Text style={{ fontFamily: 'Inter_600SemiBold', color: c.text }}>Note: </Text>
-              This token is linked to your device. Reinstalling the app or changing devices will require new token activation.
+              <Text style={{ fontFamily: 'Inter_600SemiBold', color: c.text }}>{t('manualSetup.noteLabel')}</Text>
+              {t('manualSetup.noteText')}
             </Text>
           </View>
 
@@ -301,7 +303,7 @@ export default function ManualSetupScreen() {
             ]}
           >
             <Text style={[s.submitBtnText, { color: canSubmit ? '#fff' : c.textMuted }]}>
-              {loading ? 'Activating…' : 'Add token'}
+              {loading ? t('manualSetup.activating') : t('manualSetup.submit')}
             </Text>
           </Pressable>
         </View>
@@ -316,7 +318,7 @@ export default function ManualSetupScreen() {
         <Pressable style={s.backdrop} onPress={() => setShowChannelPicker(false)} />
         <View style={[s.sheet, { backgroundColor: c.surface }]}> 
           <View style={[s.sheetHeader, { borderBottomColor: c.border }]}> 
-            <Text style={[s.sheetTitle, { color: c.text }]}>Select Channel</Text>
+            <Text style={[s.sheetTitle, { color: c.text }]}>{t('manualSetup.selectChannelTitle')}</Text>
             <TouchableOpacity onPress={() => setShowChannelPicker(false)} activeOpacity={0.7}>
               <Ionicons name="close" size={20} color={c.textMuted} />
             </TouchableOpacity>
@@ -354,14 +356,14 @@ export default function ManualSetupScreen() {
           <View style={[s.errorIconWrap, { backgroundColor: isDark ? '#2a0a12' : '#fff0f3' }]}>
             <Ionicons name="alert-circle-outline" size={28} color={c.error} />
           </View>
-          <Text style={[s.errorTitle, { color: c.text }]}>Activation Failed</Text>
+          <Text style={[s.errorTitle, { color: c.text }]}>{t('manualSetup.failedTitle')}</Text>
           <Text style={[s.errorDescription, { color: c.textMuted }]}>{errorMessage}</Text>
           <TouchableOpacity
             style={[s.errorCta, { backgroundColor: c.primary }]}
             activeOpacity={0.85}
             onPress={() => setShowErrorModal(false)}
           >
-            <Text style={s.errorCtaText}>Try again</Text>
+            <Text style={s.errorCtaText}>{t('common.tryAgain')}</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -443,7 +445,7 @@ const s = StyleSheet.create({
     elevation: 4,
   },
 
-  bottomBar: { padding: 16, borderTopWidth: 1 },
+  bottomBar: { padding: 16, paddingBottom: Platform.OS === 'android' ? 24 : 16, borderTopWidth: 1 },
   submitBtn: {
     height: 48,
     borderRadius: 10,

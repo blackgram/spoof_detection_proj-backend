@@ -1,4 +1,5 @@
-import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { FlagImage } from '@/components/flag-image';
 import { useState, type ReactNode } from 'react';
 
 import { COUNTRIES, LANGUAGES } from '@/constants/preferences';
@@ -7,6 +8,8 @@ import { usePreferences } from '@/context/PreferencesContext';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useTranslation } from '@/lib/i18n';
 
 type SectionRowProps = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -42,7 +45,7 @@ function SectionRow({ icon, title, subtitle, onPress, rightNode, accent }: Secti
 }
 
 export default function ProfileScreen() {
-  const { totpAccount } = useAuth();
+  const { clearAllTokens } = useAuth();
   const {
     country,
     language,
@@ -52,26 +55,54 @@ export default function ProfileScreen() {
     setLanguage,
     setThemeMode,
     setBiometricEnabled,
+    resetPreferences,
   } = usePreferences();
   const c = useAppColors();
+  const router = useRouter();
+  const { t } = useTranslation();
   const selectedCountry = COUNTRIES.find((item) => item.code === country) ?? COUNTRIES[0];
   const selectedLanguage = LANGUAGES.find((item) => item.code === language) ?? LANGUAGES[0];
+
+  const themeLabels: Record<'system' | 'light' | 'dark', string> = {
+    system: t('settings.themeSystem'),
+    light: t('settings.themeLight'),
+    dark: t('settings.themeDark'),
+  };
 
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [showLanguagePicker, setShowLanguagePicker] = useState(false);
   const pickerOpen = showCountryPicker || showLanguagePicker;
 
+  const handleFactoryReset = () => {
+    Alert.alert(
+      t('settings.factoryResetTitle'),
+      t('settings.factoryResetMessage'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.reset'),
+          style: 'destructive',
+          onPress: async () => {
+            await clearAllTokens();
+            resetPreferences();
+            router.replace('/welcome');
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={['top']}>
       <View style={[styles.header, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
-        <Text style={[styles.headerTitle, { color: c.text }]}>Settings</Text>
+        <Text style={[styles.headerTitle, { color: c.text }]}>{t('settings.title')}</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.sectionWrap}>
-          <Text style={[styles.sectionLabel, { color: c.textMuted }]}>Appearance</Text>
+          <Text style={[styles.sectionLabel, { color: c.textMuted }]}>{t('settings.section.appearance')}</Text>
           <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border }]}>
-            <Text style={[styles.cardTitle, { color: c.text }]}>Theme</Text>
+            <Text style={[styles.cardTitle, { color: c.text }]}>{t('settings.theme')}</Text>
             <View style={styles.themeRow}>
               {(['system', 'light', 'dark'] as const).map((option) => {
                 const selected = themeMode === option;
@@ -103,7 +134,7 @@ export default function ProfileScreen() {
                         { color: selected ? '#fff' : c.textMuted },
                       ]}
                     >
-                      {option[0].toUpperCase() + option.slice(1)}
+                      {themeLabels[option]}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -113,32 +144,34 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.sectionWrap}>
-          <Text style={[styles.sectionLabel, { color: c.textMuted }]}>Localization</Text>
+          <Text style={[styles.sectionLabel, { color: c.textMuted }]}>{t('settings.section.localization')}</Text>
           <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border, paddingVertical: 2 }]}>
             <SectionRow
               icon="globe-outline"
-              title="Country"
-              subtitle={`${selectedCountry.flag} ${selectedCountry.name}`}
+              title={t('common.country')}
+              subtitle={selectedCountry.name}
               onPress={() => setShowCountryPicker(true)}
+              rightNode={<FlagImage code={selectedCountry.flag} width={24} height={16} />}
             />
             <View style={[styles.rowDivider, { backgroundColor: c.border }]} />
             <SectionRow
               icon="language-outline"
-              title="Language"
+              title={t('common.language')}
               subtitle={selectedLanguage.name}
               onPress={() => setShowLanguagePicker(true)}
               accent="#FFF3E0"
+              rightNode={<FlagImage code={selectedLanguage.flag} width={24} height={16} />}
             />
           </View>
         </View>
 
         <View style={styles.sectionWrap}>
-          <Text style={[styles.sectionLabel, { color: c.textMuted }]}>Security</Text>
+          <Text style={[styles.sectionLabel, { color: c.textMuted }]}>{t('settings.section.security')}</Text>
           <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border, paddingVertical: 2 }]}>
             <SectionRow
               icon="shield-checkmark-outline"
-              title="Biometric Security"
-              subtitle="Manage biometric settings"
+              title={t('settings.biometric')}
+              subtitle={t('settings.biometricSubtitle')}
               rightNode={(
                 <Switch
                   value={biometricEnabled}
@@ -153,22 +186,31 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.sectionWrap}>
-          <Text style={[styles.sectionLabel, { color: c.textMuted }]}>About</Text>
+          <Text style={[styles.sectionLabel, { color: c.textMuted }]}>{t('settings.section.about')}</Text>
           <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border, paddingVertical: 2 }]}>
             <SectionRow
               icon="information-circle-outline"
-              title="App Information"
-              subtitle="Version 1.0.0"
+              title={t('settings.appInfo')}
+              subtitle={t('settings.appVersion')}
               rightNode={<Ionicons name="chevron-forward" size={18} color={c.textMuted} />}
             />
           </View>
         </View>
 
-        {/* <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border, marginTop: 6 }]}>
-          <Text style={[styles.accountLabel, { color: c.textMuted }]}>Account</Text>
-          <Text style={[styles.accountValue, { color: c.text }]}>{totpAccount?.issuer ?? 'No token configured'}</Text>
-          <Text style={[styles.accountValueSub, { color: c.textMuted }]}>{totpAccount?.label ?? 'Add a token to populate account details'}</Text>
-        </View> */}
+        <View style={styles.sectionWrap}>
+          <Text style={[styles.sectionLabel, { color: c.textMuted }]}>{t('settings.section.dangerZone')}</Text>
+          <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border, paddingVertical: 2 }]}>
+            <SectionRow
+              icon="refresh-circle-outline"
+              title={t('settings.factoryReset')}
+              subtitle={t('settings.factoryResetSubtitle')}
+              onPress={handleFactoryReset}
+              accent="#FFF0F3"
+              rightNode={<Ionicons name="warning-outline" size={18} color={c.error} />}
+            />
+          </View>
+        </View>
+
       </ScrollView>
 
       {pickerOpen && (
@@ -185,7 +227,7 @@ export default function ProfileScreen() {
       {showCountryPicker && (
         <View style={[styles.sheet, { backgroundColor: c.surface, borderTopColor: c.border }]}>
           <View style={[styles.sheetHeader, { borderBottomColor: c.border }]}>
-            <Text style={[styles.sheetTitle, { color: c.text }]}>Select Country</Text>
+            <Text style={[styles.sheetTitle, { color: c.text }]}>{t('common.selectCountry')}</Text>
             <TouchableOpacity onPress={() => setShowCountryPicker(false)}>
               <Ionicons name="close" size={20} color={c.textMuted} />
             </TouchableOpacity>
@@ -202,7 +244,7 @@ export default function ProfileScreen() {
                     setShowCountryPicker(false);
                   }}
                 >
-                  <Text style={styles.sheetFlag}>{item.flag}</Text>
+                  <FlagImage code={item.flag} width={28} height={20} />
                   <Text style={[styles.sheetItemText, { color: selected ? c.primary : c.text }]}>{item.name}</Text>
                   {selected && <Ionicons name="checkmark" size={18} color={c.primary} />}
                 </TouchableOpacity>
@@ -215,7 +257,7 @@ export default function ProfileScreen() {
       {showLanguagePicker && (
         <View style={[styles.sheet, { backgroundColor: c.surface, borderTopColor: c.border }]}>
           <View style={[styles.sheetHeader, { borderBottomColor: c.border }]}>
-            <Text style={[styles.sheetTitle, { color: c.text }]}>Select Language</Text>
+            <Text style={[styles.sheetTitle, { color: c.text }]}>{t('common.selectLanguage')}</Text>
             <TouchableOpacity onPress={() => setShowLanguagePicker(false)}>
               <Ionicons name="close" size={20} color={c.textMuted} />
             </TouchableOpacity>
@@ -232,6 +274,7 @@ export default function ProfileScreen() {
                     setShowLanguagePicker(false);
                   }}
                 >
+                  <FlagImage code={item.flag} width={28} height={20} />
                   <Text style={[styles.sheetItemText, { color: selected ? c.primary : c.text }]}>{item.name}</Text>
                   {selected && <Ionicons name="checkmark" size={18} color={c.primary} />}
                 </TouchableOpacity>
@@ -254,7 +297,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerTitle: { fontSize: 20, fontFamily: 'Inter_600SemiBold' },
-  scrollContent: { padding: 14, paddingBottom: 38 },
+  scrollContent: { padding: 14, paddingBottom: Platform.OS === 'android' ? 56 : 38 },
   sectionWrap: { marginBottom: 14 },
   sectionLabel: {
     fontSize: 11,
@@ -347,6 +390,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  sheetFlag: { fontSize: 18 },
   sheetItemText: { fontSize: 14, fontFamily: 'Inter_500Medium', flex: 1 },
 });

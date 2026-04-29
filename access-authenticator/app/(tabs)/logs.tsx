@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { BiometricGate } from '@/components/biometric-gate';
@@ -12,26 +12,28 @@ import {
   type AuthRequestItem,
   type AuthRequestType,
 } from '@/api/pushAuth';
+import { useTranslation, type TranslateFn } from '@/lib/i18n';
 
-const TYPE_META: Record<AuthRequestType, { icon: string; accent: string; label: string }> = {
-  login: { icon: 'desktop-outline', accent: '#16A34A', label: 'Login' },
-  transfer: { icon: 'swap-horizontal-outline', accent: '#2563EB', label: 'Transfer' },
-  consent: { icon: 'shield-checkmark-outline', accent: '#D97706', label: 'Consent' },
+const TYPE_ICONS: Record<AuthRequestType, { icon: string; accent: string; labelKey: string }> = {
+  login: { icon: 'desktop-outline', accent: '#16A34A', labelKey: 'logs.types.login' },
+  transfer: { icon: 'swap-horizontal-outline', accent: '#2563EB', labelKey: 'logs.types.transfer' },
+  consent: { icon: 'shield-checkmark-outline', accent: '#D97706', labelKey: 'logs.types.consent' },
 };
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, t: TranslateFn): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return t('logs.timeAgo.justNow');
+  if (mins < 60) return t('logs.timeAgo.minutes', { n: mins });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  if (hrs < 24) return t('logs.timeAgo.hours', { n: hrs });
+  return t('logs.timeAgo.days', { n: Math.floor(hrs / 24) });
 }
 
 export default function LogsScreen() {
   const { totpAccount, isTokenSetup, isBiometricLocked } = useAuth();
   const c = useAppColors();
+  const { t } = useTranslation();
 
   const [requests, setRequests] = useState<AuthRequestItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -64,17 +66,17 @@ export default function LogsScreen() {
   };
 
   if (isTokenSetup && isBiometricLocked) {
-    return <BiometricGate title="Access Token" />;
+    return <BiometricGate title={t('biometric.title')} />;
   }
 
   if (!isTokenSetup) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: c.background }]}>
-        <Text style={[styles.title, { color: c.text }]}>Authorizations</Text>
+        <Text style={[styles.title, { color: c.text }]}>{t('logs.title')}</Text>
         <View style={styles.emptyState}>
           <Ionicons name="notifications-off-outline" size={48} color={c.textMuted} />
           <Text style={[styles.emptyText, { color: c.textMuted }]}>
-            Set up your token to receive push authorization requests.
+            {t('logs.empty.notSetup')}
           </Text>
         </View>
       </SafeAreaView>
@@ -83,7 +85,7 @@ export default function LogsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: c.background }]}>
-      <Text style={[styles.title, { color: c.text }]}>Authorizations</Text>
+      <Text style={[styles.title, { color: c.text }]}>{t('logs.title')}</Text>
       {requests.length > 0 && (
         <View style={[styles.countPill, { backgroundColor: c.orange }]}>
           <Text style={styles.countText}>{requests.length}</Text>
@@ -92,6 +94,7 @@ export default function LogsScreen() {
 
       <ScrollView
         style={styles.list}
+        contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl refreshing={loading} onRefresh={fetchRequests} tintColor={c.orange} />
         }
@@ -100,7 +103,7 @@ export default function LogsScreen() {
           <View style={styles.emptyState}>
             <Ionicons name="checkmark-circle-outline" size={48} color={c.textMuted} />
             <Text style={[styles.emptyText, { color: c.textMuted }]}>
-              No pending authorization requests.{'\n'}Pull down to refresh.
+              {t('logs.empty.noRequests')}{'\n'}{t('logs.empty.pullToRefresh')}
             </Text>
           </View>
         )}
@@ -110,7 +113,7 @@ export default function LogsScreen() {
         )}
 
         {requests.map((req) => {
-          const meta = TYPE_META[req.request_type] ?? TYPE_META.login;
+          const meta = TYPE_ICONS[req.request_type] ?? TYPE_ICONS.login;
           const isResponding = responding === req.request_id;
           return (
             <View
@@ -123,8 +126,8 @@ export default function LogsScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={styles.cardTitleRow}>
-                    <Text style={[styles.cardTitle, { color: c.text }]}>{meta.label}</Text>
-                    <Text style={[styles.timeAgo, { color: c.textMuted }]}>{timeAgo(req.created_at)}</Text>
+                    <Text style={[styles.cardTitle, { color: c.text }]}>{t(meta.labelKey)}</Text>
+                    <Text style={[styles.timeAgo, { color: c.textMuted }]}>{timeAgo(req.created_at, t)}</Text>
                   </View>
                   <Text style={[styles.channel, { color: c.textMuted }]}>{req.channel}</Text>
                   {req.request_type === 'transfer' && req.details.amount_ngn != null && (
@@ -141,7 +144,7 @@ export default function LogsScreen() {
                   disabled={isResponding}
                   onPress={() => handleRespond(req.request_id, 'reject')}
                 >
-                  <Text style={{ color: '#fff', fontSize: 14 }}>Deny</Text>
+                  <Text style={{ color: '#fff', fontSize: 14 }}>{t('logs.deny')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.approveBtn, { backgroundColor: c.orange }]}
@@ -149,7 +152,7 @@ export default function LogsScreen() {
                   onPress={() => handleRespond(req.request_id, 'approve')}
                 >
                   <Text style={{ color: '#fff', fontSize: 14 }}>
-                    {isResponding ? 'Processing…' : 'Approve'}
+                    {isResponding ? t('common.processing') : t('logs.approve')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -165,6 +168,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 24 },
   title: { fontSize: 24, fontWeight: '700', marginBottom: 4 },
   list: { flex: 1, marginTop: 12 },
+  listContent: { paddingBottom: Platform.OS === 'android' ? 24 : 8 },
   countPill: {
     position: 'absolute',
     top: 28,

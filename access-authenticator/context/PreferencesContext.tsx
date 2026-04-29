@@ -18,6 +18,7 @@ type PreferencesContextValue = PreferencesState & {
   setThemeMode: (mode: ThemeMode) => void;
   setBiometricEnabled: (enabled: boolean) => void;
   completeOnboarding: (country: string, language: string) => void;
+  resetPreferences: () => void;
 };
 
 const PREFS_KEY = 'accessauth_app_preferences';
@@ -84,6 +85,10 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       setBiometricEnabled: (biometricEnabled: boolean) => updatePrefs({ biometricEnabled }),
       completeOnboarding: (country: string, language: string) =>
         updatePrefs({ country, language, hasOnboarded: true }),
+      resetPreferences: () => {
+        setPrefs(DEFAULT_PREFS);
+        void savePrefs(DEFAULT_PREFS);
+      },
     }),
     [loaded, prefs],
   );

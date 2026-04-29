@@ -28,6 +28,7 @@ type AuthContextValue = {
   lockBiometricGate: () => void;
   setupToken: (account: Omit<TotpAccount, 'id' | 'createdAt'>) => Promise<void>;
   removeToken: (id: string) => Promise<void>;
+  clearAllTokens: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -88,8 +89,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authInProgressRef.current = true;
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const enrolled = await LocalAuthentication.isEnrolledAsync();
-      if (!hasHardware || !enrolled) {
-        return false;
+
+      // No biometric capability whatsoever — bypass the lock silently
+      if (!hasHardware && !enrolled) {
+        setIsBiometricLocked(false);
+        return true;
       }
 
       const result = await LocalAuthentication.authenticateAsync({
@@ -140,6 +144,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTotpAccounts(next);
   }, []);
 
+  const clearAllTokens = useCallback(async () => {
+    await clearTotpAccounts();
+    setTotpAccounts([]);
+    setIsBiometricLocked(false);
+  }, []);
+
   const getTokenById = useCallback((id: string) => {
     return totpAccounts.find((item) => item.id === id) ?? null;
   }, [totpAccounts]);
@@ -155,6 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       lockBiometricGate,
       setupToken,
       removeToken,
+      clearAllTokens,
     }),
     [
       totpAccounts,
@@ -165,6 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       lockBiometricGate,
       setupToken,
       removeToken,
+      clearAllTokens,
     ]
   );
 

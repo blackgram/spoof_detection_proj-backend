@@ -4,10 +4,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import { useAppColors } from '@/hooks/use-app-colors';
+import { useTranslation } from '@/lib/i18n';
 
 export default function AddTokenScreen() {
   const c = useAppColors();
   const router = useRouter();
+  const { t } = useTranslation();
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={['top']}>
@@ -20,13 +22,13 @@ export default function AddTokenScreen() {
         >
           <Ionicons name="arrow-back" size={20} color={c.textMuted} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: c.text }]}>Add token</Text>
+        <Text style={[styles.headerTitle, { color: c.text }]}>{t('addToken.title')}</Text>
       </View>
 
       {/* Body */}
       <View style={styles.content}>
         <Text style={[styles.subtitle, { color: c.textMuted }]}>
-          Choose how to add your token
+          {t('addToken.subtitle')}
         </Text>
 
         <View style={styles.options}>
@@ -40,7 +42,7 @@ export default function AddTokenScreen() {
               <Ionicons name="qr-code-outline" size={24} color={c.primary} />
             </View>
             <View style={styles.optionTextWrap}>
-              <Text style={[styles.optionTitle, { color: c.text }]}>Scan QR Code</Text>
+              <Text style={[styles.optionTitle, { color: c.text }]}>{t('addToken.scan')}</Text>
             </View>
           </TouchableOpacity>
 
@@ -54,9 +56,9 @@ export default function AddTokenScreen() {
               <Ionicons name="keypad-outline" size={24} color={c.orange} />
             </View>
             <View style={styles.optionTextWrap}>
-              <Text style={[styles.optionTitle, { color: c.text }]}>Enter manually</Text>
+              <Text style={[styles.optionTitle, { color: c.text }]}>{t('addToken.manual')}</Text>
               <Text style={[styles.optionHint, { color: c.textMuted }]}>
-                Use if you have activation code
+                {t('addToken.manualHint')}
               </Text>
             </View>
           </TouchableOpacity>

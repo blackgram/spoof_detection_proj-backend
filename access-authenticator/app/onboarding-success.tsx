@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import { useAppColors } from '@/hooks/use-app-colors';
+import { useTranslation } from '@/lib/i18n';
 
 const AUTO_NAV_DELAY_MS = 2000;
 
 export default function OnboardingSuccessScreen() {
   const c = useAppColors();
   const router = useRouter();
+  const { t } = useTranslation();
   const redirectedRef = useRef(false);
+  const bounceAnim = useRef(new Animated.Value(0)).current;
 
   const goHome = useCallback(() => {
     if (redirectedRef.current) return;
@@ -24,28 +27,41 @@ export default function OnboardingSuccessScreen() {
     return () => clearTimeout(timer);
   }, [goHome]);
 
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bounceAnim, {
+          toValue: -12,
+          duration: 500,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(bounceAnim, {
+          toValue: 0,
+          duration: 500,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [bounceAnim]);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={['top', 'bottom']}>
       <View style={styles.content}>
-        <View style={[styles.successOuter, { backgroundColor: '#d7f5e1' }]}>
-          <View style={[styles.successInner, { backgroundColor: '#05c451' }]}>
-            <Ionicons name="checkmark" size={46} color="#fff" />
+        {/* outer light green ring + inner solid green circle, matching design */}
+        <Animated.View style={[styles.outerRing, { transform: [{ translateY: bounceAnim }] }]}>
+          <View style={styles.innerCircle}>
+            <Ionicons name="checkmark" size={44} color="#fff" strokeWidth={3} />
           </View>
-        </View>
-        <Text style={[styles.title, { color: c.text }]}>You are all set!</Text>
-        <Text style={[styles.subtitle, { color: c.textMuted }]}>
-          Get ready to manage your tokens securely
-        </Text>
-      </View>
+        </Animated.View>
 
-      <View style={[styles.bottomBar, { borderTopColor: c.border, backgroundColor: c.surface }]}>
-        <TouchableOpacity
-          style={[styles.continueBtn, { backgroundColor: c.primary }]}
-          activeOpacity={0.9}
-          onPress={goHome}
-        >
-          <Text style={styles.continueText}>Continue now</Text>
-        </TouchableOpacity>
+        <Text style={[styles.title, { color: c.text }]}>{t('onboardingSuccess.title')}</Text>
+        <Text style={[styles.subtitle, { color: c.textMuted }]}>
+          {t('onboardingSuccess.subtitle')}
+        </Text>
       </View>
     </SafeAreaView>
   );
@@ -57,51 +73,36 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 32,
   },
-  successOuter: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
+  outerRing: {
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: '#bbf7d0',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 28,
   },
-  successInner: {
-    width: 126,
-    height: 126,
-    borderRadius: 63,
+  innerCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#22c55e',
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
-    fontSize: 44,
-    lineHeight: 50,
+    fontSize: 22,
+    lineHeight: 30,
     fontFamily: 'Inter_700Bold',
     textAlign: 'center',
+    marginBottom: 8,
   },
   subtitle: {
-    marginTop: 10,
-    fontSize: 18,
-    lineHeight: 26,
+    fontSize: 14,
+    lineHeight: 22,
     fontFamily: 'Inter_400Regular',
     textAlign: 'center',
-  },
-  bottomBar: {
-    borderTopWidth: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-  },
-  continueBtn: {
-    height: 72,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  continueText: {
-    color: '#fff',
-    fontSize: 17,
-    lineHeight: 22,
-    fontFamily: 'Inter_500Medium',
   },
 });

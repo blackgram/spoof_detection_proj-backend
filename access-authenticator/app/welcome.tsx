@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,11 +14,15 @@ import { useRouter } from 'expo-router';
 
 import { COUNTRIES, LANGUAGES } from '@/constants/preferences';
 import { usePreferences } from '@/context/PreferencesContext';
-import { useAppColors } from '@/hooks/use-app-colors';
+import { useAppColors, useIsDarkMode } from '@/hooks/use-app-colors';
+import { FlagImage } from '@/components/flag-image';
+import { useTranslation } from '@/lib/i18n';
 
 export default function WelcomeScreen() {
   const c = useAppColors();
+  const isDark = useIsDarkMode();
   const router = useRouter();
+  const { t } = useTranslation();
   const { country, language, completeOnboarding } = usePreferences();
 
   const [selectedCountry, setSelectedCountry] = useState(country);
@@ -36,6 +41,7 @@ export default function WelcomeScreen() {
   );
 
   const pickerOpen = showCountryPicker || showLanguagePicker;
+  const languageBadgeBg = isDark ? '#2A1800' : '#FFF3E0';
 
   const onContinue = () => {
     if (submitting) return;
@@ -47,13 +53,13 @@ export default function WelcomeScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={['top', 'bottom']}>
       <View style={styles.content}>
-        <Text style={[styles.title, { color: c.text }]}>Welcome</Text>
+        <Text style={[styles.title, { color: c.text }]}>{t('welcome.title')}</Text>
         <Text style={[styles.subtitle, { color: c.textMuted }]}>
-          Select your country and language to get started
+          {t('welcome.subtitle')}
         </Text>
 
         <View style={styles.fieldGroup}>
-          <Text style={[styles.label, { color: c.textMuted }]}>Country</Text>
+          <Text style={[styles.label, { color: c.textMuted }]}>{t('common.country')}</Text>
           <TouchableOpacity
             style={[styles.selectBtn, { borderColor: c.border, backgroundColor: c.surface }]}
             onPress={() => {
@@ -64,7 +70,7 @@ export default function WelcomeScreen() {
           >
             <View style={styles.rowStart}>
               <View style={[styles.flagBadge, { backgroundColor: c.accent }]}>
-                <Text style={styles.flag}>{selectedCountryItem.flag}</Text>
+                <FlagImage code={selectedCountryItem.flag} width={28} height={20} />
               </View>
               <Text style={[styles.selectText, { color: c.text }]}>{selectedCountryItem.name}</Text>
             </View>
@@ -73,7 +79,7 @@ export default function WelcomeScreen() {
         </View>
 
         <View style={styles.fieldGroup}>
-          <Text style={[styles.label, { color: c.textMuted }]}>Language</Text>
+          <Text style={[styles.label, { color: c.textMuted }]}>{t('common.language')}</Text>
           <TouchableOpacity
             style={[styles.selectBtn, { borderColor: c.border, backgroundColor: c.surface }]}
             onPress={() => {
@@ -83,8 +89,8 @@ export default function WelcomeScreen() {
             activeOpacity={0.8}
           >
             <View style={styles.rowStart}>
-              <View style={[styles.flagBadge, { backgroundColor: c.accent }]}>
-                <Text style={styles.flag}>🌐</Text>
+              <View style={[styles.flagBadge, { backgroundColor: languageBadgeBg }]}>
+                <FlagImage code={selectedLanguageItem.flag} width={28} height={20} />
               </View>
               <Text style={[styles.selectText, { color: c.text }]}>{selectedLanguageItem.name}</Text>
             </View>
@@ -99,7 +105,7 @@ export default function WelcomeScreen() {
           activeOpacity={0.9}
           style={[styles.continueBtn, { backgroundColor: c.primary }]}
         >
-          <Text style={styles.continueText}>Continue</Text>
+          <Text style={styles.continueText}>{t('common.continue')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -115,6 +121,12 @@ export default function WelcomeScreen() {
 
       {showCountryPicker && (
         <View style={[styles.sheet, { backgroundColor: c.surface, borderTopColor: c.border }]}>
+          <View style={[styles.sheetHeader, { borderBottomColor: c.border }]}>
+            <Text style={[styles.sheetTitle, { color: c.text }]}>{t('common.selectCountry')}</Text>
+            <TouchableOpacity onPress={() => setShowCountryPicker(false)} style={styles.sheetCloseBtn}>
+              <Ionicons name="close" size={20} color={c.textMuted} />
+            </TouchableOpacity>
+          </View>
           <ScrollView showsVerticalScrollIndicator={false}>
             {COUNTRIES.map((item) => {
               const selected = item.code === selectedCountry;
@@ -128,7 +140,7 @@ export default function WelcomeScreen() {
                   }}
                 >
                   <View style={styles.rowStart}>
-                    <Text style={styles.flag}>{item.flag}</Text>
+                    <FlagImage code={item.flag} width={28} height={20} />
                     <Text style={[styles.sheetItemText, { color: selected ? c.primary : c.text }]}>
                       {item.name}
                     </Text>
@@ -143,6 +155,12 @@ export default function WelcomeScreen() {
 
       {showLanguagePicker && (
         <View style={[styles.sheet, { backgroundColor: c.surface, borderTopColor: c.border }]}>
+          <View style={[styles.sheetHeader, { borderBottomColor: c.border }]}>
+            <Text style={[styles.sheetTitle, { color: c.text }]}>{t('common.selectLanguage')}</Text>
+            <TouchableOpacity onPress={() => setShowLanguagePicker(false)} style={styles.sheetCloseBtn}>
+              <Ionicons name="close" size={20} color={c.textMuted} />
+            </TouchableOpacity>
+          </View>
           <ScrollView showsVerticalScrollIndicator={false}>
             {LANGUAGES.map((item) => {
               const selected = item.code === selectedLanguage;
@@ -155,9 +173,12 @@ export default function WelcomeScreen() {
                     setShowLanguagePicker(false);
                   }}
                 >
-                  <Text style={[styles.sheetItemText, { color: selected ? c.primary : c.text }]}>
-                    {item.name}
-                  </Text>
+                  <View style={styles.rowStart}>
+                    <FlagImage code={item.flag} width={28} height={20} />
+                    <Text style={[styles.sheetItemText, { color: selected ? c.primary : c.text }]}>
+                      {item.name}
+                    </Text>
+                  </View>
                   {selected ? <Ionicons name="checkmark" size={18} color={c.primary} /> : null}
                 </TouchableOpacity>
               );
@@ -172,21 +193,22 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: 24, paddingTop: 22 },
-  title: { fontSize: 44, lineHeight: 50, fontFamily: 'Inter_700Bold' },
+  title: { fontSize: 28, lineHeight: 50, fontFamily: 'Inter_600SemiBold' },
   subtitle: {
     marginTop: 8,
-    fontSize: 16,
+    fontSize: 14,
     lineHeight: 23,
     fontFamily: 'Inter_400Regular',
     marginBottom: 32,
   },
   fieldGroup: { marginBottom: 18 },
-  label: { fontSize: 14, lineHeight: 20, fontFamily: 'Inter_500Medium', marginBottom: 10 },
+  label: { fontSize: 14, lineHeight: 20, fontFamily: 'Inter_400Medium', marginBottom: 10 },
   selectBtn: {
-    height: 86,
+    // height: 60,
     borderWidth: 1,
     borderRadius: 18,
     paddingHorizontal: 16,
+    paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -199,16 +221,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  flag: { fontSize: 30 },
-  selectText: { fontSize: 17, lineHeight: 22, fontFamily: 'Inter_500Medium' },
+  selectText: { fontSize: 16, lineHeight: 22, fontFamily: 'Inter_400Regular' },
   bottomBar: {
     marginTop: 'auto',
     borderTopWidth: 1,
     paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'android' ? 24 : 16,
   },
   continueBtn: {
-    height: 72,
+    height: 56,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
@@ -234,6 +256,25 @@ const styles = StyleSheet.create({
     maxHeight: '60%',
     zIndex: 30,
     paddingBottom: 12,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  sheetTitle: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  sheetCloseBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sheetItem: {
     minHeight: 52,

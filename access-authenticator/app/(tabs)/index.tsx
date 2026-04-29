@@ -1,5 +1,6 @@
 import {
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,6 +20,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { generateTOTP, formatCode, PERIOD } from '@/lib/totp';
+import { FlagImage } from '@/components/flag-image';
+import { useTranslation } from '@/lib/i18n';
 
 export default function HomeScreen() {
   const { totpAccounts, isTokenSetup, isBiometricLocked } = useAuth();
@@ -26,6 +29,7 @@ export default function HomeScreen() {
   const c = useAppColors();
   const isDark = useIsDarkMode();
   const router = useRouter();
+  const { t } = useTranslation();
 
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [showLanguagePicker, setShowLanguagePicker] = useState(false);
@@ -48,7 +52,7 @@ export default function HomeScreen() {
   const pickerOpen = showCountryPicker || showLanguagePicker;
 
   if (isTokenSetup && isBiometricLocked) {
-    return <BiometricGate title="Access Token" />;
+    return <BiometricGate title={t('biometric.title')} />;
   }
 
   return (
@@ -63,7 +67,7 @@ export default function HomeScreen() {
       {/* Header */}
       <View style={[styles.header, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
         <View style={styles.headerTitleRow}>
-          <Text style={[styles.headerTitle, { color: c.text }]}>Access Token</Text>
+          <Text style={[styles.headerTitle, { color: c.text }]}>{t('home.title')}</Text>
           <TouchableOpacity
             style={[styles.settingsBtn, { backgroundColor: c.background, borderColor: c.border }]}
             onPress={() => router.push('/(tabs)/settings')}
@@ -81,7 +85,7 @@ export default function HomeScreen() {
             }}
             activeOpacity={0.8}
           >
-            <Text style={styles.filterFlag}>{selectedCountry.flag}</Text>
+            <FlagImage code={selectedCountry.flag} width={20} height={14} />
             <Text numberOfLines={1} style={[styles.filterText, { color: c.text }]}>
               {selectedCountry.name}
             </Text>
@@ -95,6 +99,7 @@ export default function HomeScreen() {
             }}
             activeOpacity={0.8}
           >
+            <FlagImage code={selectedLanguage.flag} width={20} height={14} />
             <Text numberOfLines={1} style={[styles.filterText, { color: c.text }]}>
               {selectedLanguage.name}
             </Text>
@@ -172,9 +177,9 @@ export default function HomeScreen() {
             <View style={[styles.shieldBadge, { backgroundColor: c.accent }]}>
               <Ionicons name="shield-outline" size={40} color={c.primary} />
             </View>
-            <Text style={[styles.emptyTitle, { color: c.text }]}>No tokens yet</Text>
+            <Text style={[styles.emptyTitle, { color: c.text }]}>{t('home.empty.title')}</Text>
             <Text style={[styles.emptySubtitle, { color: c.textMuted }]}>
-              Add a security token to protect your accounts
+              {t('home.empty.subtitle')}
             </Text>
           </View>
         )}
@@ -238,7 +243,7 @@ export default function HomeScreen() {
       {showCountryPicker && (
         <View style={[styles.sheet, { backgroundColor: c.surface, borderTopColor: c.border }]}>
           <View style={[styles.sheetHeader, { borderBottomColor: c.border }]}>
-            <Text style={[styles.sheetTitle, { color: c.text }]}>Select Country</Text>
+            <Text style={[styles.sheetTitle, { color: c.text }]}>{t('common.selectCountry')}</Text>
             <TouchableOpacity onPress={() => setShowCountryPicker(false)} style={styles.sheetCloseBtn}>
               <Ionicons name="close" size={20} color={c.textMuted} />
             </TouchableOpacity>
@@ -256,7 +261,7 @@ export default function HomeScreen() {
                   }}
                 >
                   <View style={styles.sheetItemLeft}>
-                    <Text style={styles.sheetFlag}>{item.flag}</Text>
+                    <FlagImage code={item.flag} width={28} height={20} />
                     <Text style={[styles.sheetItemLabel, { color: selected ? c.primary : c.text }]}>
                       {item.name}
                     </Text>
@@ -272,7 +277,7 @@ export default function HomeScreen() {
       {showLanguagePicker && (
         <View style={[styles.sheet, { backgroundColor: c.surface, borderTopColor: c.border }]}>
           <View style={[styles.sheetHeader, { borderBottomColor: c.border }]}>
-            <Text style={[styles.sheetTitle, { color: c.text }]}>Select Language</Text>
+            <Text style={[styles.sheetTitle, { color: c.text }]}>{t('common.selectLanguage')}</Text>
             <TouchableOpacity onPress={() => setShowLanguagePicker(false)} style={styles.sheetCloseBtn}>
               <Ionicons name="close" size={20} color={c.textMuted} />
             </TouchableOpacity>
@@ -289,9 +294,12 @@ export default function HomeScreen() {
                     setShowLanguagePicker(false);
                   }}
                 >
-                  <Text style={[styles.sheetItemLabel, { color: selected ? c.primary : c.text }]}>
-                    {item.name}
-                  </Text>
+                  <View style={styles.sheetItemLeft}>
+                    <FlagImage code={item.flag} width={28} height={20} />
+                    <Text style={[styles.sheetItemLabel, { color: selected ? c.primary : c.text }]}>
+                      {item.name}
+                    </Text>
+                  </View>
                   {selected && <Ionicons name="checkmark" size={18} color={c.primary} />}
                 </TouchableOpacity>
               );
@@ -347,9 +355,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 38,
   },
-  filterFlag: {
-    fontSize: 16,
-  },
   filterText: {
     fontSize: 13,
     fontFamily: 'Inter_500Medium',
@@ -364,7 +369,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  scrollContent: { padding: 12, paddingBottom: 100 },
+  scrollContent: { padding: 12, paddingBottom: Platform.OS === 'android' ? 120 : 100 },
 
   /* Token card */
   card: {
@@ -592,9 +597,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-  },
-  sheetFlag: {
-    fontSize: 18,
   },
   sheetItemLabel: {
     fontSize: 14,

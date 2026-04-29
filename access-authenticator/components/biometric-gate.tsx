@@ -5,16 +5,20 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
 import { useAppColors } from '@/hooks/use-app-colors';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTranslation } from '@/lib/i18n';
 
 type BiometricGateProps = {
   title?: string;
 };
 
-export function BiometricGate({ title = 'Access Token' }: BiometricGateProps) {
+export function BiometricGate({ title }: BiometricGateProps) {
   const c = useAppColors();
+  const { t } = useTranslation();
   const { unlockWithBiometrics } = useAuth();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [failed, setFailed] = useState(false);
+
+  const headerTitle = title ?? t('biometric.title');
 
   const startAuthentication = async () => {
     setIsAuthenticating(true);
@@ -36,7 +40,7 @@ export function BiometricGate({ title = 'Access Token' }: BiometricGateProps) {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: c.background }]} edges={['top', 'bottom']}>
       <View style={[styles.header, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
-        <Text style={[styles.headerTitle, { color: c.text }]}>{title}</Text>
+        <Text style={[styles.headerTitle, { color: c.text }]}>{headerTitle}</Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -47,14 +51,14 @@ export function BiometricGate({ title = 'Access Token' }: BiometricGateProps) {
         </View>
 
         <Text style={[styles.title, { color: c.text }]}>
-          {isAuthenticating ? 'Authenticating...' : 'Verify identity'}
+          {isAuthenticating ? t('biometric.authenticating') : t('biometric.verify')}
         </Text>
         <Text style={[styles.subtitle, { color: c.textMuted }]}>
           {failed
-            ? 'Authentication failed. Tap unlock and try again.'
+            ? t('biometric.failed')
             : isAuthenticating
-              ? 'Confirming biometric data'
-              : 'Use fingerprint or Face ID to continue'}
+              ? t('biometric.confirming')
+              : t('biometric.idle')}
         </Text>
       </View>
 
@@ -69,7 +73,7 @@ export function BiometricGate({ title = 'Access Token' }: BiometricGateProps) {
           ) : (
             <>
               <Ionicons name="lock-open-outline" size={16} color="#fff" />
-              <Text style={styles.unlockText}>Unlock</Text>
+              <Text style={styles.unlockText}>{t('common.unlock')}</Text>
             </>
           )}
         </TouchableOpacity>

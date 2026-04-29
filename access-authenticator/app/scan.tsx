@@ -11,6 +11,7 @@ import { useAuth } from '@/context/AuthContext';
 import { parseActivationQR } from '@/lib/parseActivationQR';
 import { PrimaryButton } from '@/components/primary-button';
 import { palette } from '@/constants/theme';
+import { useTranslation } from '@/lib/i18n';
 
 /** Corner bracket rendered in SVG-style using nested Views */
 function ScanFrame() {
@@ -42,6 +43,7 @@ export default function ScanScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { setupToken } = useAuth();
+  const { t } = useTranslation();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanStatus, setScanStatus] = useState<'scanning' | 'success' | 'activating'>('scanning');
   const [pendingPayload, setPendingPayload] = useState<{
@@ -53,9 +55,9 @@ export default function ScanScreen() {
 
   const isScanning = scanStatus === 'scanning';
   const scanSubtitle = useMemo(() => {
-    if (!pendingPayload) return 'Activation token detected';
-    return `${pendingPayload.channel} token detected`;
-  }, [pendingPayload]);
+    if (!pendingPayload) return t('scan.detectedDefault');
+    return t('scan.detected', { channel: pendingPayload.channel });
+  }, [pendingPayload, t]);
 
   useEffect(() => {
     if (!permission?.granted) {
@@ -91,12 +93,12 @@ export default function ScanScreen() {
       if (!parsed.activationCode || !parsed.channel || !parsed.channelUsername) {
         const codeOnly = parsed.activationCode ?? '';
         Alert.alert(
-          'Incomplete QR payload',
-          'This QR only contains an activation code. Please complete setup using manual channel entry.',
+          t('scan.incompleteTitle'),
+          t('scan.incompleteMessage'),
           [
-            { text: 'Cancel', style: 'cancel', onPress: () => setScanStatus('scanning') },
+            { text: t('common.cancel'), style: 'cancel', onPress: () => setScanStatus('scanning') },
             {
-              text: 'Enter manually',
+              text: t('scan.enterManually'),
               onPress: () => {
                 router.replace({
                   pathname: '/manual-setup',
@@ -115,8 +117,8 @@ export default function ScanScreen() {
       });
       setScanStatus('success');
     } catch (e: any) {
-      Alert.alert('Invalid QR Code', e.message || 'Could not read this QR code.', [
-        { text: 'OK', onPress: () => setScanStatus('scanning') },
+      Alert.alert(t('scan.invalidTitle'), e.message || t('scan.invalidDefault'), [
+        { text: t('common.ok'), onPress: () => setScanStatus('scanning') },
       ]);
     }
   };
@@ -142,7 +144,7 @@ export default function ScanScreen() {
       router.back();
     } catch (e: any) {
       setScanStatus('success');
-      Alert.alert('Activation Failed', e.message || 'Could not activate token.');
+      Alert.alert(t('scan.failedTitle'), e.message || t('scan.failedDefault'));
     }
   };
 
@@ -153,12 +155,12 @@ export default function ScanScreen() {
         <View style={[styles.permIconWrap, { backgroundColor: c.accent }]}>
           <Ionicons name="camera-outline" size={40} color={c.primary} />
         </View>
-        <Text style={[styles.permTitle, { color: c.text }]}>Camera access needed</Text>
+        <Text style={[styles.permTitle, { color: c.text }]}>{t('scan.permTitle')}</Text>
         <Text style={[styles.permSub, { color: c.textMuted }]}>
-          We need camera access to scan activation QR codes.
+          {t('scan.permSubtitle')}
         </Text>
         <View style={styles.permBtn}>
-          <PrimaryButton label="Grant Permission" onPress={requestPermission} />
+          <PrimaryButton label={t('scan.grantPermission')} onPress={requestPermission} />
         </View>
       </SafeAreaView>
     );
@@ -183,7 +185,7 @@ export default function ScanScreen() {
           >
             <Ionicons name="arrow-back" size={20} color="#fff" />
           </TouchableOpacity>
-          <Text style={styles.topTitle}>Add token</Text>
+          <Text style={styles.topTitle}>{t('scan.title')}</Text>
           <View style={{ width: 40 }} />
         </View>
 
@@ -206,10 +208,10 @@ export default function ScanScreen() {
                   <Ionicons name="checkmark" size={36} color="#fff" />
                 </View>
               </View>
-              <Text style={styles.successTitle}>QR Code Scanned!</Text>
+              <Text style={styles.successTitle}>{t('scan.success')}</Text>
               <Text style={styles.successSubtitle}>{scanSubtitle}</Text>
               <PrimaryButton
-                label={scanStatus === 'activating' ? 'Activating...' : 'Activate Token'}
+                label={scanStatus === 'activating' ? t('scan.activating') : t('scan.activate')}
                 onPress={() => pendingPayload && finishSetup(pendingPayload)}
                 disabled={scanStatus === 'activating'}
               />
@@ -222,7 +224,7 @@ export default function ScanScreen() {
           {isScanning ? (
             <>
               <Text style={styles.hint}>
-                Point camera at QR code to scan
+                {t('scan.point')}
               </Text>
               <View style={styles.dotsRow}>
                 <View style={styles.dot} />
@@ -236,13 +238,13 @@ export default function ScanScreen() {
               >
                 <Ionicons name="keypad-outline" size={16} color={palette.light.primary} />
                 <Text style={[styles.manualBtnText, { color: palette.light.primary }]}>
-                  Enter manually
+                  {t('scan.enterManually')}
                 </Text>
               </TouchableOpacity>
             </>
           ) : (
             <Text style={styles.warningText}>
-              Activation code expires in 10 minutes
+              {t('scan.warning')}
             </Text>
           )}
         </View>

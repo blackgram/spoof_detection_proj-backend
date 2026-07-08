@@ -36,6 +36,7 @@ class LivenessStartResponse(BaseModel):
 
     session_id: str
     customer_id: str
+    nonce: str = ""                 # opaque nonce from liveliness service
     prompts: List[str]              # ordered prompts, e.g. ["look_straight", "turn_left", "smile"]
     expires_at: str                 # ISO-8601 UTC
     max_retries: int

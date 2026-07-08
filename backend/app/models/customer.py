@@ -87,6 +87,7 @@ class RegisterBody(BaseModel):
     password: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    bvn: Optional[str] = None
 
 
 class RegisterResponse(BaseModel):

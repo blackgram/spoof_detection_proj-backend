@@ -5,10 +5,30 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "This app needs camera access to capture your selfie for identity verification."
+          "cameraPermission": "This app needs camera access for identity verification and to scan payment details from slips or labels."
         }
       ],
-      "expo-secure-store"
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "This app needs camera access for identity verification and to scan payment details from slips or labels.",
+          "enableMicrophonePermission": false,
+          "enableFrameProcessors": true
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.5"
+          },
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ],
+      "./plugins/withStripIosPushEntitlement"
     ],
     "slug": "spoof-detection-mobile",
     "version": "1.0.0",
@@ -24,9 +44,9 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "This app needs camera access to capture your selfie for identity verification.",
+        "NSCameraUsageDescription": "This app needs camera access for identity verification and to scan payment details from slips or labels.",
         "NSFaceIDUsageDescription": "This app uses Face ID to authorize secure device-key signatures.",
-        "NSPhotoLibraryUsageDescription": "This app needs photo library access to select your ID photo.",
+        "NSPhotoLibraryUsageDescription": "This app needs photo library access to select ID photos and upload payment slips for scanning.",
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
           "NSAllowsLocalNetworking": true

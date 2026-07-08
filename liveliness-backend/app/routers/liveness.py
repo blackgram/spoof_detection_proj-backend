@@ -124,17 +124,23 @@ async def kyc_verify_with_bank_image(
 
 
 @router.post("/liveness/start", response_model=LivenessStartResponse)
-async def liveness_start(subject_id: str = Form(..., description="Opaque subject id (must match /liveness/verify)")):
+async def liveness_start(
+    customer_bvn: str = Form(..., description="11-digit BVN"),
+    account_no: str = Form(..., description="Customer account number"),
+    app_id: str = Form(..., description="Calling application identifier"),
+):
     """Issue a multi-capture liveness challenge; no customer DB lookup."""
-    sid = (subject_id or "").strip()
+    sid = (customer_bvn or "").strip()
     if not sid:
-        raise HTTPException(status_code=400, detail="subject_id is required")
+        raise HTTPException(status_code=400, detail="customer_bvn is required")
 
     session = get_liveness_store().create(customer_id=sid)
     logger.info(
-        "Liveness session created session_id=%s subject=%s prompts=%s expires_at=%s",
+        "Liveness session created session_id=%s bvn=%s account_no=%s app_id=%s prompts=%s expires_at=%s",
         session.session_id,
         sid,
+        account_no,
+        app_id,
         session.prompts,
         session.expires_at.isoformat(),
     )

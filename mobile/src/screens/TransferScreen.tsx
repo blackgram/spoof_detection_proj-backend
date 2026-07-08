@@ -20,17 +20,9 @@ import type { RootStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../context/AuthContext';
 import { colors, radius, spacing } from '../theme';
 import { KYC_AMOUNT_THRESHOLD_NGN, MAX_TRANSFER_AMOUNT_NGN } from '../constants';
+import { BANKS } from '../constants/banks';
 
 const COMMISSION_NGN = 10.75;
-
-const DUMMY_BANKS = [
-  { id: '1', name: 'Access Bank' },
-  { id: '2', name: 'GTBank' },
-  { id: '3', name: 'Zenith Bank' },
-  { id: '4', name: 'First Bank' },
-  { id: '5', name: 'UBA' },
-  { id: '6', name: 'Kuda Microfinance Bank' },
-];
 
 function formatAmountWithCommas(raw: string): string {
   const cleaned = raw.replace(/,/g, '').replace(/[^\d.]/g, '');
@@ -52,7 +44,12 @@ export default function TransferScreen() {
   const { kycCompleted, customerId } = useAuth();
   const navigation = useNavigation<Nav>();
   const route = useRoute();
-  const params = route.params as { kycSuccess?: boolean } | undefined;
+  const params = route.params as
+    | {
+        kycSuccess?: boolean;
+        scanPrefill?: { bankId: string; bankName: string; accountNumber: string };
+      }
+    | undefined;
 
   const [accountNumber, setAccountNumber] = useState('');
   const [amount, setAmount] = useState('');
@@ -119,10 +116,18 @@ export default function TransferScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
+      if (params?.scanPrefill) {
+        const { bankId, bankName, accountNumber: acct } = params.scanPrefill;
+        setSelectedBank({ id: bankId, name: bankName });
+        setAccountNumber(acct);
+        setBankTouched(true);
+        setAccountNumberTouched(true);
+        navigation.setParams({ scanPrefill: undefined, kycSuccess: params?.kycSuccess });
+      }
       if (params?.kycSuccess) {
         navigation.setParams({ kycSuccess: false });
       }
-    }, [params?.kycSuccess]),
+    }, [params?.scanPrefill, params?.kycSuccess, navigation]),
   );
 
   if (step === 'kyc_prompt') {
@@ -215,6 +220,13 @@ export default function TransferScreen() {
 
             {/* Form fields */}
             <View style={styles.form}>
+              <Pressable
+                style={({ pressed }) => [styles.scanButton, pressed && styles.scanButtonPressed]}
+                onPress={() => navigation.navigate('ScanToPay')}
+              >
+                <Text style={styles.scanButtonText}>Scan account details</Text>
+              </Pressable>
+
               <View style={styles.fieldCard}>
                 <Text style={styles.fieldCardLabel}>Bank</Text>
                 <Pressable
@@ -347,7 +359,7 @@ export default function TransferScreen() {
           <View style={styles.dropdownCard}>
             <Text style={styles.dropdownTitle}>Select bank</Text>
             <FlatList
-              data={DUMMY_BANKS}
+              data={BANKS}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
                 <Pressable
@@ -440,6 +452,16 @@ const styles = StyleSheet.create({
 
   /* Form */
   form: { marginBottom: spacing.lg },
+  scanButton: {
+    borderRadius: radius.md,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.primary,
+    marginBottom: spacing.md,
+  },
+  scanButtonPressed: { backgroundColor: colors.primaryMuted },
+  scanButtonText: { color: colors.primary, fontSize: 15, fontWeight: '600' },
   fieldCard: {
     backgroundColor: colors.card,
     borderRadius: radius.md,

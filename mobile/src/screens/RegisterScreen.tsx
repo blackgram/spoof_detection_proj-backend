@@ -34,6 +34,7 @@ export default function RegisterScreen() {
   const [username, setUsername] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [bvn, setBvn] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -63,6 +64,11 @@ export default function RegisterScreen() {
       Alert.alert('Required', 'Please enter your last name.');
       return;
     }
+    const bvnVal = bvn.trim();
+    if (!bvnVal || bvnVal.length !== 11 || !/^\d{11}$/.test(bvnVal)) {
+      Alert.alert('Required', 'Please enter a valid 11-digit BVN.');
+      return;
+    }
     if (!user) {
       Alert.alert('Required', 'Please enter a desired username.');
       return;
@@ -89,6 +95,7 @@ export default function RegisterScreen() {
         password,
         first_name: fn,
         last_name: ln,
+        bvn: bvnVal,
       });
       navigation.navigate('KYCBvn', {
         reason: 'registration',
@@ -149,6 +156,16 @@ export default function RegisterScreen() {
             value={lastName}
             onChangeText={setLastName}
             autoCapitalize="words"
+            editable={!loading}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="BVN (11 digits)"
+            placeholderTextColor={colors.textMuted}
+            value={bvn}
+            onChangeText={setBvn}
+            keyboardType="number-pad"
+            maxLength={11}
             editable={!loading}
           />
           <TextInput

@@ -98,7 +98,7 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
 app.add_middleware(RequestLogMiddleware)
 
 # Lazy-loaded services (see app.services.loader)
-from app.services.loader import get_face_verification_service, get_spoof_detection_service
+from app.services import liveliness_client
 
 
 @app.get("/")
@@ -161,25 +161,18 @@ async def apple_app_site_association():
 @app.post("/api/warmup")
 async def warmup_models():
     """
-    Pre-load ML models (TensorFlow, PyTorch, DeepFace, Silent-Face).
-    Call this when the user opens the verification flow so /api/verify is fast.
-    Takes 2-4 minutes on first call; subsequent calls return immediately.
+    Proxy warmup to the external liveliness service so its ML models are pre-loaded.
     """
     start = time.perf_counter()
-    logger.info("Warmup started: loading ML models...")
+    logger.info("Warmup started: proxying to liveliness service...")
     try:
-        t0 = time.perf_counter()
-        get_face_verification_service()
-        logger.info(f"Face verification service loaded ({time.perf_counter() - t0:.1f}s)")
-        t0 = time.perf_counter()
-        get_spoof_detection_service()
-        logger.info(f"Spoof detection service loaded ({time.perf_counter() - t0:.1f}s)")
+        result = await liveliness_client.warmup()
         elapsed = time.perf_counter() - start
         logger.info(f"Warmup complete (total {elapsed:.1f}s)")
-        return {"status": "ready", "message": "Models loaded", "elapsed_sec": round(elapsed, 1)}
+        return {"status": "ready", "message": "Models loaded via liveliness service", "elapsed_sec": round(elapsed, 1)}
     except Exception as e:
         logger.error(f"Warmup failed: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 @app.get("/health")
@@ -203,154 +196,54 @@ async def verify_identity(
     selfie_image: UploadFile = File(..., description="Selfie or query image")
 ):
     """
-    Combined verification endpoint:
-    1. Check if selfie is real (spoof detection)
-    2. If real, verify face match (face verification)
+    Combined verification endpoint — proxied to the external liveliness service.
     """
     try:
-        # Validate file types
         if not id_image.content_type or not id_image.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="ID image must be an image file")
-        
         if not selfie_image.content_type or not selfie_image.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="Selfie image must be an image file")
 
-        verify_start = time.perf_counter()
-        logger.info("Starting verification process...")
-
-        # Step 1: Spoof Detection (check if selfie is real)
-        logger.info("=" * 80)
-        logger.info("STEP 1: SPOOF DETECTION (Liveness Check)")
-        logger.info("=" * 80)
-        
         await selfie_image.seek(0)
         selfie_bytes = await selfie_image.read()
-        
-        if not selfie_bytes or len(selfie_bytes) == 0:
+        if not selfie_bytes:
             raise HTTPException(status_code=400, detail="Selfie image is empty or could not be read")
-        
-        logger.info(f"Selfie image received: {len(selfie_bytes)} bytes, content_type: {selfie_image.content_type}")
-        
-        t0 = time.perf_counter()
-        spoof_result = await get_spoof_detection_service().detect_spoof(selfie_bytes)
-        logger.info(f"Spoof detection done ({time.perf_counter() - t0:.1f}s)")
-        
-        logger.info(f"Spoof detection result: is_real={spoof_result['is_real']}, confidence={spoof_result['confidence']:.2%}")
-        if 'details' in spoof_result:
-            logger.info(f"Detection details: {spoof_result['details']}")
 
-        if not spoof_result["is_real"]:
-            logger.warning("=" * 80)
-            logger.warning("❌ SPOOF DETECTED - Verification stopped")
-            logger.warning(f"Reason: {spoof_result.get('reason', 'Unknown')}")
-            logger.warning("=" * 80)
-            return VerificationResponse(
-                liveness_check={
-                    "is_real": False,
-                    "confidence": spoof_result["confidence"]
-                },
-                face_verification={
-                    "verified": False,
-                    "confidence": 0.0,
-                    "distance": 1.0
-                },
-                overall_result="spoof_detected",
-                message=f"Spoof detected. {spoof_result.get('reason', 'The selfie appears to be fake (printed photo or screen replay).')}"
-            )
-
-        # Step 2: Face Verification (if selfie is real)
-        logger.info("=" * 80)
-        logger.info("✅ STEP 2: FACE VERIFICATION (Liveness check passed)")
-        logger.info("=" * 80)
-        
-        # Read ID image bytes (reset file pointer first)
         await id_image.seek(0)
         id_bytes = await id_image.read()
-        
-        if not id_bytes or len(id_bytes) == 0:
+        if not id_bytes:
             raise HTTPException(status_code=400, detail="ID image is empty or could not be read")
-        
-        logger.info(f"ID image received: {len(id_bytes)} bytes, content_type: {id_image.content_type}")
-        
-        t0 = time.perf_counter()
-        verification_result = await get_face_verification_service().verify_faces(
-            id_bytes, 
-            selfie_bytes
+
+        result = await liveliness_client.kyc_verify(
+            bvn="",
+            account_no="",
+            selfie_image=selfie_bytes,
+            reference_image=id_bytes,
         )
-        logger.info(f"Face verification done ({time.perf_counter() - t0:.1f}s)")
-        
-        logger.info(f"Face verification result: verified={verification_result['verified']}, "
-                   f"confidence={verification_result['confidence']:.2%}, "
-                   f"distance={verification_result['distance']:.4f}")
-
-        # Determine overall result
-        if verification_result["verified"]:
-            overall_result = "pass"
-            message = "Identity verified successfully. Face matches and liveness check passed."
-        else:
-            overall_result = "fail"
-            message = f"Face verification failed. Faces do not match (confidence: {verification_result['confidence']:.2%})."
-
-        total_sec = time.perf_counter() - verify_start
-        logger.info("=" * 80)
-        logger.info(f"📊 FINAL RESULT: {overall_result.upper()} (total {total_sec:.1f}s)")
-        logger.info(f"Message: {message}")
-        logger.info("=" * 80)
-
-        return VerificationResponse(
-            liveness_check={
-                "is_real": True,
-                "confidence": spoof_result["confidence"]
-            },
-            face_verification={
-                "verified": verification_result["verified"],
-                "confidence": verification_result["confidence"],
-                "distance": verification_result["distance"]
-            },
-            overall_result=overall_result,
-            message=message
-        )
+        return VerificationResponse(**result)
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Verification error: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Verification failed: {str(e)}"
-        )
+        raise HTTPException(status_code=502, detail=f"Verification failed: {str(e)}")
 
 
 @app.post("/api/spoof-check")
 async def check_spoof(
     image: UploadFile = File(..., description="Image to check for spoofing")
 ):
-    """
-    Spoof detection only endpoint
-    """
+    """Spoof detection only — proxied to the external liveliness service."""
     try:
         if not image.content_type or not image.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="Image must be an image file")
-
         image_bytes = await image.read()
-        t0 = time.perf_counter()
-        result = await get_spoof_detection_service().detect_spoof(image_bytes)
-        logger.info(f"Spoof check done ({time.perf_counter() - t0:.1f}s) is_real={result['is_real']}")
-
-        return {
-            "is_real": result["is_real"],
-            "confidence": result["confidence"],
-            "message": result.get("reason", "Real" if result["is_real"] else "Spoof detected")
-        }
-
+        return await liveliness_client.spoof_check(image_bytes)
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Spoof detection error: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Spoof detection failed: {str(e)}"
-        )
+        raise HTTPException(status_code=502, detail=f"Spoof detection failed: {str(e)}")
 
 
 @app.post("/api/face-verify")
@@ -358,46 +251,29 @@ async def verify_faces(
     image1: UploadFile = File(..., description="First image (reference)"),
     image2: UploadFile = File(..., description="Second image (query)")
 ):
-    """
-    Face verification only endpoint (1:1 matching)
-    """
+    """Face verification only — proxied to the external liveliness service."""
     try:
         if not image1.content_type or not image1.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="First image must be an image file")
-        
         if not image2.content_type or not image2.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="Second image must be an image file")
 
-        # Reset file pointers and read bytes
         await image1.seek(0)
         await image2.seek(0)
         image1_bytes = await image1.read()
         image2_bytes = await image2.read()
-        
-        if not image1_bytes or len(image1_bytes) == 0:
+        if not image1_bytes:
             raise HTTPException(status_code=400, detail="First image is empty or could not be read")
-        if not image2_bytes or len(image2_bytes) == 0:
+        if not image2_bytes:
             raise HTTPException(status_code=400, detail="Second image is empty or could not be read")
-        
-        t0 = time.perf_counter()
-        result = await get_face_verification_service().verify_faces(image1_bytes, image2_bytes)
-        logger.info(f"Face verify done ({time.perf_counter() - t0:.1f}s) verified={result['verified']}")
 
-        return {
-            "verified": result["verified"],
-            "confidence": result["confidence"],
-            "distance": result["distance"],
-            "message": "Faces match" if result["verified"] else "Faces do not match"
-        }
+        return await liveliness_client.face_verify(image1_bytes, image2_bytes)
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Face verification error: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Face verification failed: {str(e)}"
-        )
+        raise HTTPException(status_code=502, detail=f"Face verification failed: {str(e)}")
 
 
 if __name__ == "__main__":

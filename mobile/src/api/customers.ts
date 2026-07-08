@@ -18,6 +18,7 @@ export interface RegisterParams {
   password: string;
   first_name?: string;
   last_name?: string;
+  bvn?: string;
 }
 
 /**
@@ -41,6 +42,7 @@ export async function registerCustomer(params: RegisterParams): Promise<Register
       password: params.password,
       first_name: params.first_name?.trim() || undefined,
       last_name: params.last_name?.trim() || undefined,
+      bvn: params.bvn?.trim() || undefined,
     }),
   });
   if (!res.ok) {

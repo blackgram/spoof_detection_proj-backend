@@ -36,6 +36,7 @@ export type LivenessPrompt =
 export interface LivenessStartResponse {
   session_id: string;
   customer_id: string;
+  nonce: string;
   prompts: LivenessPrompt[];
   expires_at: string;
   max_retries: number;
@@ -64,6 +65,23 @@ export interface MultiCaptureVerificationResult
   per_frame_scores: PerFrameScore[];
   replay_signals: ReplaySignals;
   risk_flags: string[];
+}
+
+/** HTTP error from KYC liveness endpoints (includes status for session/expiry handling). */
+export class KycApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'KycApiError';
+    this.status = status;
+  }
+}
+
+async function kycApiErrorFromResponse(res: Response, fallback: string): Promise<KycApiError> {
+  const err = await res.json().catch(() => ({ detail: fallback }));
+  const detail = typeof err.detail === 'string' ? err.detail : fallback;
+  return new KycApiError(detail || `Status ${res.status}`, res.status);
 }
 
 /** GET /api/customers/{customer_id}/kyc-status */
@@ -174,9 +192,9 @@ export async function kycLivenessStart(customerId: string): Promise<LivenessStar
     clearTimeout(timeoutId);
   }
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Failed to start liveness session' }));
-    console.log('[kycLivenessStart] failed', { customerId, status: res.status, detail: err.detail });
-    throw new Error(err.detail || `Status ${res.status}`);
+    const apiErr = await kycApiErrorFromResponse(res, 'Failed to start liveness session');
+    console.log('[kycLivenessStart] failed', { customerId, status: apiErr.status, detail: apiErr.message });
+    throw apiErr;
   }
   const data = await res.json();
   console.log('[kycLivenessStart] success', {
@@ -196,13 +214,22 @@ export async function kycLivenessStart(customerId: string): Promise<LivenessStar
 export async function kycLivenessVerify(params: {
   customerId: string;
   sessionId: string;
+  nonce: string;
   frames: { uri: string; capturedAtMs: number }[];
+  /** When set, frame count must match server prompt count exactly. */
+  expectedPromptCount?: number;
 }): Promise<MultiCaptureVerificationResult> {
   console.log('[kycLivenessVerify] request', {
     customerId: params.customerId,
     sessionId: params.sessionId,
     frames: params.frames.length,
+    expectedPromptCount: params.expectedPromptCount,
   });
+  if (params.expectedPromptCount != null && params.frames.length !== params.expectedPromptCount) {
+    throw new Error(
+      `Expected ${params.expectedPromptCount} frames for this session, got ${params.frames.length}.`
+    );
+  }
   if (params.frames.length < 2) {
     throw new Error('At least two frames are required.');
   }
@@ -213,6 +240,7 @@ export async function kycLivenessVerify(params: {
   const formData = new FormData();
   formData.append('customer_id', params.customerId);
   formData.append('session_id', params.sessionId);
+  formData.append('nonce', params.nonce);
   formData.append(
     'timestamps',
     JSON.stringify(params.frames.map((f) => f.capturedAtMs))
@@ -239,14 +267,14 @@ export async function kycLivenessVerify(params: {
     clearTimeout(timeoutId);
   }
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Liveness verification failed' }));
+    const apiErr = await kycApiErrorFromResponse(res, 'Liveness verification failed');
     console.log('[kycLivenessVerify] failed', {
       customerId: params.customerId,
       sessionId: params.sessionId,
-      status: res.status,
-      detail: err.detail,
+      status: apiErr.status,
+      detail: apiErr.message,
     });
-    throw new Error(err.detail || `Status ${res.status}`);
+    throw apiErr;
   }
   const data = await res.json();
   console.log('[kycLivenessVerify] success', {

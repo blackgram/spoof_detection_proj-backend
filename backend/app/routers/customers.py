@@ -124,7 +124,7 @@ async def register(body: RegisterBody):
         raise HTTPException(status_code=400, detail="Username already taken")
 
     customer_id = db.create_customer(
-        bvn="",
+        bvn=(body.bvn or "").strip(),
         name=username,
         email=None,
         phone=phone,

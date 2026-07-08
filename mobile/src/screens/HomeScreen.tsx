@@ -98,12 +98,20 @@ export default function HomeScreen() {
           style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
           onPress={() => navigation.navigate('Transfer', undefined)}
         >
-          {/* <View style={styles.actionIcon}>
-            <Text style={styles.actionEmoji}>💸</Text>
-          </View> */}
           <View style={styles.actionTextWrap}>
             <Text style={styles.actionTitle}>Transfer</Text>
             <Text style={styles.actionSubtitle}>Other banks & more</Text>
+          </View>
+          <Text style={styles.actionChevron}>›</Text>
+        </Pressable>
+
+        <Pressable
+          style={({ pressed }) => [styles.actionCard, pressed && styles.actionCardPressed]}
+          onPress={() => navigation.navigate('ScanToPay')}
+        >
+          <View style={styles.actionTextWrap}>
+            <Text style={styles.actionTitle}>Scan to pay</Text>
+            <Text style={styles.actionSubtitle}>From slip or account label</Text>
           </View>
           <Text style={styles.actionChevron}>›</Text>
         </Pressable>

@@ -10,6 +10,7 @@ import DeviceChangeScreen from '../screens/DeviceChangeScreen';
 import TransactionPinScreen from '../screens/TransactionPinScreen';
 import HomeScreen from '../screens/HomeScreen';
 import TransferScreen from '../screens/TransferScreen';
+import ScanToPayScreen from '../screens/ScanToPayScreen';
 import ReviewScreen from '../screens/ReviewScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import LimitScreen from '../screens/LimitScreen';
@@ -46,7 +47,13 @@ export type RootStackParamList = {
   DeviceChange: undefined;
   TransactionPin: { next: PinNextAction };
   Home: undefined;
-  Transfer: { kycSuccess?: boolean } | undefined;
+  ScanToPay: undefined;
+  Transfer:
+    | {
+        kycSuccess?: boolean;
+        scanPrefill?: { bankId: string; bankName: string; accountNumber: string };
+      }
+    | undefined;
   Review: {
     senderAccountNumber: string;
     senderAccountType: string;
@@ -188,6 +195,15 @@ function HomeStack() {
         name="Transfer"
         component={TransferScreen}
         options={{ title: 'Other Banks Transfers' }}
+      />
+      <Stack.Screen
+        name="ScanToPay"
+        component={ScanToPayScreen}
+        options={{
+          presentation: 'transparentModal',
+          animation: 'slide_from_bottom',
+          headerShown: false,
+        }}
       />
       <Stack.Screen
         name="Review"

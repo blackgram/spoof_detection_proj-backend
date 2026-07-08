@@ -6,17 +6,22 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test": "tsx --test src/features/scanToPay/parsePaymentDetails.test.ts"
   },
   "dependencies": {
     "@noble/ed25519": "^2.1.0",
     "@noble/hashes": "^1.8.0",
     "@react-native-community/slider": "5.0.1",
+    "@react-native-ml-kit/text-recognition": "^2.0.0",
     "@react-navigation/bottom-tabs": "^7.15.5",
     "@react-navigation/native": "^7.1.31",
     "@react-navigation/native-stack": "^7.14.2",
+    "@shopify/react-native-skia": "2.2.12",
     "@tanstack/react-query": "^5.95.2",
+    "babel-preset-expo": "~54.0.10",
     "expo": "~54.0.33",
+    "expo-build-properties": "~1.0.10",
     "expo-camera": "~17.0.10",
     "expo-constants": "~18.0.13",
     "expo-device": "~8.0.10",
@@ -31,12 +36,17 @@
     "react-native-biometrics": "^3.0.1",
     "react-native-get-random-values": "^1.11.0",
     "react-native-passkey": "^3.3.2",
+    "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
-    "react-native-svg": "15.12.1"
+    "react-native-svg": "15.12.1",
+    "react-native-vision-camera": "4.7.2",
+    "react-native-vision-camera-face-detector": "^1.10.2",
+    "react-native-worklets-core": "^1.6.3"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "tsx": "^4.19.4",
     "typescript": "~5.9.2"
   },
   "private": true

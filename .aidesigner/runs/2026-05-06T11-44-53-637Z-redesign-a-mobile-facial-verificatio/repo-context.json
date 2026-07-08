@@ -1,0 +1,19 @@
+{
+  "repoRoot": "/Users/applemacbook/Projects/Access/spoof_detection_proj",
+  "cwd": "/Users/applemacbook/Projects/Access/spoof_detection_proj",
+  "stack": {
+    "frameworks": [],
+    "componentLibraries": [],
+    "styling": [],
+    "componentDirectories": [],
+    "packageFiles": [
+      "package.json"
+    ]
+  },
+  "routes": [],
+  "tokens": {
+    "sources": [],
+    "tokens": []
+  },
+  "summary": "Repo root: /Users/applemacbook/Projects/Access/spoof_detection_proj\nWorking directory: /Users/applemacbook/Projects/Access/spoof_detection_proj\nFrameworks: none detected\nStyling: none detected\nComponent libraries: none detected\nRoute roots: none detected\nRoute candidates: none detected\nComponent directories: none detected\nToken sources: none detected\nVisible design language hints: no strong hints detected"
+}
